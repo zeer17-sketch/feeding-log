@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>喂奶记录助手</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#ededed;height:100vh;height:100dvh;
+  display:flex;flex-direction:column;max-width:500px;margin:0 auto;
+  -webkit-tap-highlight-color:transparent;
+}
+.header{
+  background:#07c160;color:#fff;padding:12px 16px;text-align:center;
+  font-size:17px;font-weight:600;position:sticky;top:0;z-index:10;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.header .title{display:flex;align-items:center;gap:8px}
+.header .export-btn{background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 14px;border-radius:16px;font-size:13px;cursor:pointer}
+
+.chat-area{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
+
+.msg{max-width:85%;padding:10px 14px;border-radius:8px;font-size:15px;line-height:1.5;word-break:break-word}
+.msg.bot{background:#fff;align-self:flex-start;border-radius:4px 8px 8px 8px;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.msg.user{background:#95ec69;align-self:flex-end;border-radius:8px 4px 8px 8px}
+.msg.time{align-self:center;font-size:12px;color:#999;background:none;padding:4px 8px}
+
+.typing{align-self:flex-start;padding:8px 14px}
+.typing span{display:inline-block;width:6px;height:6px;border-radius:50%;background:#999;margin:0 2px;animation:blink 1.4s infinite both}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+
+.card{
+  align-self:flex-start;background:#fff;border-radius:8px;
+  padding:12px;margin:4px 0;font-size:14px;
+  box-shadow:0 1px 2px rgba(0,0,0,.08);max-width:95%
+}
+.card .card-title{font-size:13px;color:#07c160;font-weight:600;margin-bottom:8px}
+.card .row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:#333}
+.card .row .lbl{color:#999}
+.card .actions{display:flex;gap:8px;margin-top:10px}
+.card .btn{flex:1;padding:9px 0;border-radius:6px;border:none;font-size:14px;cursor:pointer;font-weight:500}
+.card .btn.confirm{background:#07c160;color:#fff}
+.card .btn.cancel{background:#f5f5f5;color:#666}
+
+.summary-card{
+  align-self:flex-start;background:linear-gradient(135deg,#e8f5e9,#c8e6c9);
+  border-radius:10px;padding:14px;font-size:14px;width:100%;
+  box-shadow:0 1px 3px rgba(0,0,0,.1)
+}
+.summary-card h3{font-size:15px;margin-bottom:10px;color:#2e7d32}
+.summary-card .stat{display:flex;gap:12px;margin-bottom:8px;justify-content:space-around}
+.summary-card .si{text-align:center}
+.summary-card .si .n{font-size:24px;font-weight:700;color:#333}
+.summary-card .si .l{font-size:11px;color:#888}
+.summary-card .recent{margin-top:10px;border-top:1px solid rgba(0,0,0,.1);padding-top:8px}
+.summary-card .recent .rh{font-size:12px;color:#888;margin-bottom:4px}
+.summary-card .recent .ri{font-size:12px;color:#555;padding:2px 0}
+
+.input-area{
+  background:#f7f7f7;padding:10px 12px;display:flex;align-items:center;gap:8px;
+  border-top:1px solid #ddd;position:sticky;bottom:0
+}
+.input-area input{
+  flex:1;padding:10px 14px;border:none;border-radius:20px;
+  font-size:15px;outline:none;background:#fff
+}
+.vbtn,.sbtn{
+  width:40px;height:40px;border-radius:50%;border:none;
+  font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;flex-shrink:0
+}
+.vbtn{background:#fff;color:#666}
+.vbtn.listening{background:#ff4444;color:#fff;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,68,68,.4)}50%{box-shadow:0 0 0 12px rgba(255,68,68,0)}}
+.sbtn{background:#07c160;color:#fff;font-size:18px}
+.sbtn:disabled{background:#ccc}
+
+.vs{text-align:center;padding:8px;color:#ff4444;font-size:13px;font-weight:500;background:#fff;border-top:1px solid #ffcdd2}
+
+.modal-overlay{
+  display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);
+  z-index:100;justify-content:center;align-items:center
+}
+.modal-overlay.show{display:flex}
+.modal{
+  background:#fff;border-radius:12px;padding:20px;width:90%;max-width:400px;max-height:80vh;overflow-y:auto
+}
+.modal h3{font-size:17px;margin-bottom:12px;text-align:center}
+.modal .record-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
+.modal .record-item .del{color:#ff4444;background:none;border:none;font-size:16px;cursor:pointer;padding:4px 8px}
+.modal .csv-area{width:100%;height:200px;font-size:12px;font-family:monospace;border:1px solid #ddd;border-radius:8px;padding:10px;margin:10px 0;resize:vertical}
+.modal .copy-btn{width:100%;padding:12px;background:#07c160;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;margin-top:8px}
+.modal .close-btn{width:100%;padding:10px;background:#f5f5f5;color:#666;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-top:6px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="title"><span style="font-size:22px">🍼</span> 喂奶记录助手</div>
+  <button class="export-btn" onclick="showExport()">📋 记录</button>
+</div>
+
+<div class="chat-area" id="chatArea">
+  <div class="msg bot">
+    👋 你好！我是喂奶记录助手。<br><br>
+    你可以用<b>语音 🎤</b>或<b>文字</b>告诉我宝宝的情况。<br><br>
+    💬 试试说：<br>
+    • "刚刚喝了80毫升奶粉"<br>
+    • "拉粑粑了，颜色正常"<br>
+    • "10分钟前喝了60ml，没打嗝"
+  </div>
+  <div class="msg time" id="todayLabel"></div>
+</div>
+
+<div class="vs" id="voiceStatus" style="display:none">🎤 正在聆听...请说话</div>
+
+<div class="input-area">
+  <button class="vbtn" id="voiceBtn">🎤</button>
+  <input type="text" id="textInput" placeholder="说说宝宝的情况..." autocomplete="off" enterkeyhint="send">
+  <button class="sbtn" id="sendBtn">➤</button>
+</div>
+
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <h3>📋 所有记录</h3>
+    <div id="recordList" style="max-height:200px;overflow-y:auto"></div>
+    <textarea class="csv-area" id="csvOutput" readonly placeholder="暂无记录"></textarea>
+    <button class="copy-btn" onclick="copyCSV()">📋 复制 CSV</button>
+    <button class="copy-btn" style="background:#576b95;margin-top:6px" onclick="downloadCSV()">💾 下载 CSV 文件</button>
+    <button class="close-btn" onclick="closeExport()">关闭</button>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'feeding_bot_records';
+
+function getRecords(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch(e){return[]}}
+function saveRecords(records){localStorage.setItem(STORAGE_KEY,JSON.stringify(records))}
+
+function addRecord(rec){
+  const records=getRecords();
+  rec.id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  rec.createdAt=new Date().toISOString();
+  records.push(rec);
+  saveRecords(records);
+  return rec;
+}
+
+function deleteRecord(id){
+  const records=getRecords().filter(r=>r.id!==id);
+  saveRecords(records);
+}
+
+function getTodayRecords(){
+  const today=new Date().toISOString().slice(0,10);
+  return getRecords().filter(r=>r.date===today);
+}
+
+function getSummary(){
+  const today=new Date().toISOString().slice(0,10);
+  const records=getRecords().filter(r=>r.date===today);
+  const feedings=records.filter(r=>r.event==='Feeding');
+  const diapers=records.filter(r=>r.event==='Diaper');
+  return{
+    date:today,feedingCount:feedings.length,diaperCount:diapers.length,
+    totalVolume:feedings.reduce((s,r)=>s+(parseFloat(r.volume)||0),0),
+    records:records.sort((a,b)=>b.time.localeCompare(a.time))
+  };
+}
+
+// Chat UI
+const chatArea=document.getElementById('chatArea');
+const textInput=document.getElementById('textInput');
+const sendBtn=document.getElementById('sendBtn');
+const voiceBtn=document.getElementById('voiceBtn');
+const voiceStatus=document.getElementById('voiceStatus');
+
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recognition=null,isListening=false;
+
+function initSpeech(){
+  if(!SpeechRecognition){voiceBtn.style.display='none';return}
+  recognition=new SpeechRecognition();
+  recognition.lang='zh-CN';
+  recognition.interimResults=false;
+  recognition.continuous=false;
+  recognition.maxAlternatives=1;
+  recognition.onresult=e=>{
+    const text=e.results[0][0].transcript.trim();
+    stopListening();
+    if(text)addUserMsg(text);
+  };
+  recognition.onerror=e=>{
+    stopListening();
+    if(e.error==='no-speech')addBotMsg('没有听到声音，请再试一次 🙉');
+    else if(e.error==='not-allowed')addBotMsg('麦克风权限未开启，请在浏览器设置中允许 📢');
+    else addBotMsg('语音识别出错，请用文字输入 📝');
+  };
+  recognition.onend=()=>stopListening();
+}
+
+function startListening(){
+  if(!recognition||isListening)return;
+  try{isListening=true;voiceBtn.classList.add('listening');voiceBtn.textContent='🔴';voiceStatus.style.display='block';recognition.start()}catch(e){stopListening()}
+}
+function stopListening(){
+  isListening=false;voiceBtn.classList.remove('listening');voiceBtn.textContent='🎤';voiceStatus.style.display='none';
+  try{recognition.stop()}catch(e){}
+}
+
+voiceBtn.addEventListener('click',()=>isListening?stopListening():startListening());
+sendBtn.addEventListener('click',sendMessage);
+textInput.addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage()});
+
+function sendMessage(){
+  const text=textInput.value.trim();
+  if(!text)return;
+  textInput.value='';
+  addUserMsg(text);
+}
+
+function addUserMsg(text){
+  const div=document.createElement('div');div.className='msg user';div.textContent=text;
+  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+  processMessage(text);
+}
+
+function addBotMsg(text){
+  const div=document.createElement('div');div.className='msg bot';div.textContent=text;
+  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+}
+
+function showTyping(){
+  const div=document.createElement('div');div.className='typing';div.id='typingIndicator';
+  div.innerHTML='<span></span><span></span><span></span>';
+  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+}
+function hideTyping(){const el=document.getElementById('typingIndicator');if(el)el.remove()}
+
+// NLP Parser
+function parseMessage(text){
+  const now=new Date();
+  const today=now.toISOString().slice(0,10);
+  const currentTime=now.toTimeString().slice(0,5);
+  let event='',volume='',notes=text,parsedTime=currentTime,parsedDate=today;
+
+  const feedingKW=/喝了|喂了|吃了|喝了|奶粉|母乳|喝奶|喂奶|吃奶|吸奶|亲喂|瓶喂|哺乳|nienie|neinei/i;
+  const diaperKW=/拉粑粑|拉屎|大便|便便|拉臭|💩|换尿布|尿布|尿了|小便|嘘嘘|pee|poop|拉臭臭|尿不湿|纸尿裤/i;
+
+  if(feedingKW.test(text))event='Feeding';
+  else if(diaperKW.test(text))event='Diaper';
+  else if(/\d+\s*(ml|毫升|ML|cc|CC|oz)/.test(text))event='Feeding';
+  else event='Other';
+
+  const volMatch=text.match(/(\d+)\s*(ml|毫升|ML|cc|CC|oz|安士)/i);
+  if(volMatch){volume=volMatch[1];notes=notes.replace(volMatch[0],'').trim()}
+
+  const specificTime=text.match(/(\d{1,2})[：:](\d{2})/);
+  if(specificTime){
+    parsedTime=specificTime[1].padStart(2,'0')+':'+specificTime[2];
+    notes=notes.replace(specificTime[0],'').trim();
+  }else{
+    const offsets=[
+      {re:/刚刚|刚才/,o:0},
+      {re:/(\d+)\s*分钟前/,o:m=>-parseInt(m[1])},
+      {re:/(\d+)\s*小时前/,o:m=>-parseInt(m[1])*60}
+    ];
+    for(const{re,o}of offsets){
+      const m=text.match(re);
+      if(m){const off=typeof o==='function'?o(m):o;if(off!==0){const adj=new Date(now.getTime()+off*60000);parsedTime=adj.toTimeString().slice(0,5);if(off<-120)parsedDate=adj.toISOString().slice(0,10)}notes=notes.replace(m[0],'').trim();break}
+    }
+  }
+
+  notes=notes.replace(/^[，,。\.！!\s]+/,'').replace(/[，,。\.！!\s]+$/,'').trim();
+  return{date:parsedDate,time:parsedTime,event,volume:volume||'',notes};
+}
+
+function processMessage(text){
+  showTyping();
+  setTimeout(()=>{
+    hideTyping();
+    const parsed=parseMessage(text);
+    if(parsed.event==='Other'){
+      addBotMsg('🤔 没有识别到喂奶或拉粑粑信息。\n\n你可以这样说：\n• "喝了80毫升奶粉"\n• "拉粑粑了"\n• "10点30喝了60ml"');
+      return;
+    }
+    showConfirmCard(parsed);
+  },500);
+}
+
+function showConfirmCard(p){
+  const el={Feeding:'🍼 喂奶',Diaper:'💩 拉粑粑',Other:'📝 其他'};
+  const div=document.createElement('div');div.className='card';
+  div.innerHTML=`
+    <div class="card-title">📋 识别结果确认</div>
+    <div class="row"><span class="lbl">日期</span><span>${p.date}</span></div>
+    <div class="row"><span class="lbl">时间</span><span>${p.time}</span></div>
+    <div class="row"><span class="lbl">事件</span><span>${el[p.event]}</span></div>
+    ${p.volume?`<div class="row"><span class="lbl">奶量</span><span>${p.volume} ml</span></div>`:''}
+    ${p.notes?`<div class="row"><span class="lbl">备注</span><span>${p.notes}</span></div>`:''}
+    <div class="actions">
+      <button class="btn cancel" onclick="cancelRecord(this)">取消</button>
+      <button class="btn confirm" onclick="confirmRecord(this)">✅ 确认记录</button>
+    </div>`;
+  const data={date:p.date,time:p.time,event:p.event,volume:p.volume,notes:p.notes};
+  div.querySelector('.btn.confirm').setAttribute('data-record',JSON.stringify(data));
+  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+}
+
+function confirmRecord(btn){
+  const data=JSON.parse(btn.getAttribute('data-record'));
+  btn.disabled=true;btn.textContent='记录中...';
+  const card=btn.closest('.card');
+  try{
+    addRecord(data);
+    card.remove();
+    addBotMsg('✅ 已记录！');
+    refreshSummary();
+  }catch(e){
+    btn.disabled=false;btn.textContent='✅ 确认记录';
+    addBotMsg('❌ 记录失败，请重试');
+  }
+}
+
+function cancelRecord(btn){btn.closest('.card').remove();addBotMsg('已取消 👍')}
+
+function refreshSummary(){
+  const s=getSummary();
+  const el={Feeding:'🍼 喂奶',Diaper:'💩 拉粑粑',Other:'📝 其他'};
+  const existing=document.getElementById('summaryCard');
+  if(existing)existing.remove();
+
+  const div=document.createElement('div');div.className='summary-card';div.id='summaryCard';
+  const recentHtml=s.records.slice(0,3).map(r=>
+    `<div class="ri">${r.time} ${el[r.event]||r.event} ${r.volume?r.volume+'ml':''} ${r.notes?'· '+r.notes:''}</div>`
+  ).join('');
+
+  div.innerHTML=`
+    <h3>📊 今日汇总 (${s.date})</h3>
+    <div class="stat">
+      <div class="si"><div class="n">${s.feedingCount}</div><div class="l">喂奶次数</div></div>
+      <div class="si"><div class="n">${s.totalVolume}ml</div><div class="l">总奶量</div></div>
+      <div class="si"><div class="n">${s.diaperCount}</div><div class="l">拉粑粑</div></div>
+    </div>
+    ${recentHtml?`<div class="recent"><div class="rh">最近记录</div>${recentHtml}</div>`:''}
+  `;
+  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+}
+
+// Export
+function showExport(){
+  const records=getRecords().sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time));
+  const el={Feeding:'喂奶',Diaper:'拉粑粑',Other:'其他'};
+  const listEl=document.getElementById('recordList');
+  if(records.length===0){listEl.innerHTML='<p style="text-align:center;color:#999;padding:20px">暂无记录</p>'}
+  else{
+    listEl.innerHTML=records.map(r=>
+      `<div class="record-item">
+        <span>${r.date} ${r.time} ${el[r.event]||r.event} ${r.volume?r.volume+'ml':''}</span>
+        <button class="del" onclick="delRecord('${r.id}')">🗑</button>
+      </div>`
+    ).join('');
+  }
+
+  const csv='Date 日期,Time 时间,Event 事件,Volume 奶量,Notes 备注\n'+records.map(r=>
+    `${r.date},${r.time},${r.event},${r.volume},${r.notes}`
+  ).join('\n');
+
+  document.getElementById('csvOutput').value=csv;
+  document.getElementById('exportModal').classList.add('show');
+}
+
+function closeExport(){document.getElementById('exportModal').classList.remove('show');refreshSummary()}
+
+function delRecord(id){
+  if(!confirm('确定删除这条记录吗？'))return;
+  deleteRecord(id);showExport();
+}
+
+function copyCSV(){
+  const csv=document.getElementById('csvOutput').value;
+  navigator.clipboard.writeText(csv).then(()=>alert('CSV 已复制到剪贴板！可以粘贴到 Excel 或腾讯文档中。')).catch(()=>alert('复制失败，请手动选择并复制'));
+}
+
+function downloadCSV(){
+  const csv=document.getElementById('csvOutput').value;
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='喂奶记录.csv';a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Init
+(function(){
+  const now=new Date();
+  const days=['日','一','二','三','四','五','六'];
+  document.getElementById('todayLabel').textContent=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${days[now.getDay()]}`;
+  initSpeech();
+  refreshSummary();
+})();
+</script>
+</body>
+</html>
