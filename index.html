@@ -110,8 +110,9 @@ body{
     你可以用<b>语音 🎤</b>或<b>文字</b>告诉我宝宝的情况。<br><br>
     💬 试试说：<br>
     • "刚刚喝了80毫升奶粉"<br>
-    • "拉粑粑了，颜色正常"<br>
-    • "10分钟前喝了60ml，没打嗝"
+    • "上午11点喝了60ml，没打嗝"<br>
+    • "晚上8点半拉粑粑"<br>
+    • "下午3点喝了90毫升"
   </div>
   <div class="msg time" id="todayLabel"></div>
 </div>
@@ -259,25 +260,56 @@ function parseMessage(text){
   const volMatch=text.match(/(\d+)\s*(ml|毫升|ML|cc|CC|oz|安士)/i);
   if(volMatch){volume=volMatch[1];notes=notes.replace(volMatch[0],'').trim()}
 
-  // Chinese time: "11点", "11点30", "11点30分", "11点半"
+  // --- Time parsing with AM/PM support ---
   let timeExtracted=false;
-  const cnTimeMatch=text.match(/(\d{1,2})点(\d{1,2})分?/);
-  const cnHalfMatch=text.match(/(\d{1,2})点半/);
-  const cnHourMatch=text.match(/(\d{1,2})点/);
-  if(cnTimeMatch){
-    parsedTime=cnTimeMatch[1].padStart(2,'0')+':'+cnTimeMatch[2].padStart(2,'0');
-    notes=notes.replace(cnTimeMatch[0],'').trim();timeExtracted=true;
-  }else if(cnHalfMatch){
-    parsedTime=cnHalfMatch[1].padStart(2,'0')+':30';
-    notes=notes.replace(cnHalfMatch[0],'').trim();timeExtracted=true;
-  }else if(cnHourMatch){
-    parsedTime=cnHourMatch[1].padStart(2,'0')+':00';
-    notes=notes.replace(cnHourMatch[0],'').trim();timeExtracted=true;
+  const curH=now.getHours();
+  function to24h(h,pref){
+    if(!pref)return h;
+    if(/早上|上午|凌晨|早晨|am/i.test(pref))return h===12?0:h;
+    if(/中午|正午|noon/i.test(pref))return 12;
+    if(/下午|晚上|傍晚|夜里|pm/i.test(pref))return h===12?12:h+12;
+    return h;
   }
+  function infer24h(h){
+    if(h>=13)return h;
+    const pmH=h+12;
+    if(pmH<=23&&curH>=pmH&&curH-pmH<=2)return pmH;
+    return h;
+  }
+
+  // Try AM/PM prefixed: "上午11点30分", "下午3点半", "晚上8点"
+  const pfTime=text.match(/(早上|上午|凌晨|早晨|中午|正午|下午|晚上|傍晚|夜里)\s*(\d{1,2})点(?:(\d{1,2})分?)?/i);
+  const pfHalf=text.match(/(早上|上午|凌晨|早晨|中午|正午|下午|晚上|傍晚|夜里)\s*(\d{1,2})点半/i);
+  if(pfTime||pfHalf){
+    const m=pfTime||pfHalf;
+    const h24=to24h(parseInt(m[2]),m[1]);
+    const min=pfHalf?'30':(pfTime&&pfTime[3]?pfTime[3].padStart(2,'0'):'00');
+    parsedTime=String(h24).padStart(2,'0')+':'+min;
+    notes=notes.replace(m[0],'').trim();timeExtracted=true;
+  }
+
+  if(!timeExtracted){
+    // Bare Chinese hour: "11点", "11点30", "11点半"
+    const cnTimeMatch=text.match(/(\d{1,2})点(\d{1,2})分?/);
+    const cnHalfMatch=text.match(/(\d{1,2})点半/);
+    const cnHourMatch=text.match(/(\d{1,2})点/);
+    if(cnTimeMatch||cnHalfMatch||cnHourMatch){
+      let match,h,min='00';
+      if(cnTimeMatch){match=cnTimeMatch;h=parseInt(match[1]);min=match[2].padStart(2,'0');}
+      else if(cnHalfMatch){match=cnHalfMatch;h=parseInt(match[1]);min='30';}
+      else{match=cnHourMatch;h=parseInt(match[1]);}
+      h=infer24h(h);
+      parsedTime=String(h).padStart(2,'0')+':'+min;
+      notes=notes.replace(match[0],'').trim();timeExtracted=true;
+    }
+  }
+
   if(!timeExtracted){
     const specificTime=text.match(/(\d{1,2})[：:](\d{2})/);
     if(specificTime){
-      parsedTime=specificTime[1].padStart(2,'0')+':'+specificTime[2];
+      let h=parseInt(specificTime[1]),m=specificTime[2];
+      h=infer24h(h);
+      parsedTime=String(h).padStart(2,'0')+':'+m;
       notes=notes.replace(specificTime[0],'').trim();
     }else{
       const offsets=[
@@ -302,7 +334,7 @@ function processMessage(text){
     hideTyping();
     const parsed=parseMessage(text);
     if(parsed.event==='Other'){
-      addBotMsg('🤔 没有识别到喂奶或拉粑粑信息。\n\n你可以这样说：\n• "喝了80毫升奶粉"\n• "拉粑粑了"\n• "10点30喝了60ml"');
+      addBotMsg('🤔 没有识别到喂奶或拉粑粑信息。\n\n你可以这样说：\n• "喝了80毫升奶粉"\n• "上午11点喝了60ml"\n• "晚上8点半拉粑粑"');
       return;
     }
     showConfirmCard(parsed);
@@ -328,14 +360,23 @@ function showConfirmCard(p){
   chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
 }
 
+const SYNC_SERVER='http://127.0.0.1:8765/sync';
+
 function confirmRecord(btn){
   const data=JSON.parse(btn.getAttribute('data-record'));
-  btn.disabled=true;btn.textContent='记录中...';
+  btn.disabled=true;btn.textContent='同步中...';
   const card=btn.closest('.card');
   try{
     addRecord(data);
     card.remove();
-    addBotMsg('✅ 已记录！');
+    // Try to sync to Tencent Docs via local server
+    fetch(SYNC_SERVER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+      .then(r=>r.json()).then(res=>{
+        if(res.success)addBotMsg('✅ 已记录并同步到腾讯文档！');
+        else addBotMsg('✅ 已记录（本地）！提示：启动同步服务后可自动同步到腾讯文档');
+      }).catch(()=>{
+        addBotMsg('✅ 已记录（本地）！提示：启动同步服务后可自动同步到腾讯文档');
+      });
     refreshSummary();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ 确认记录';
