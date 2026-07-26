@@ -373,24 +373,10 @@ function confirmRecord(btn){
   try{
     addRecord(data);
     card.remove();
-    // Sync to Google Sheets via hidden form (bypasses CORS entirely)
-    var fid='gsync-'+Date.now();
-    var ifr=document.createElement('iframe');
-    ifr.name=fid;ifr.style.display='none';
-    document.body.appendChild(ifr);
-    var f=document.createElement('form');
-    f.method='POST';f.action=SYNC_SERVER;f.target=fid;
-    var inp=document.createElement('input');
-    inp.type='hidden';inp.name='payload';
-    inp.value=JSON.stringify(data);
-    f.appendChild(inp);
-    document.body.appendChild(f);
-    f.submit();
-    setTimeout(function(){
-      document.body.removeChild(f);
-      document.body.removeChild(ifr);
-    },3000);
-    addBotMsg('✅ 已同步到 Google Sheets！');
+    // Sync to Google Sheets via sendBeacon (cross-origin, no CORS needed)
+    var blob=new Blob([JSON.stringify(data)],{type:'text/plain'});
+    var sent=navigator.sendBeacon(SYNC_SERVER,blob);
+    addBotMsg(sent?'✅ 已同步到 Google Sheets！':'✅ 已本地记录（同步失败，请重试）');
     refreshSummary();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ 确认记录';
