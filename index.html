@@ -360,7 +360,11 @@ function showConfirmCard(p){
   chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
 }
 
-const SYNC_SERVER='http://127.0.0.1:8765/sync';
+// 🔧 Paste your Google Apps Script Web App URL here:
+//    1. Open your Google Sheet → Extensions → Apps Script
+//    2. Paste apps-script.gs code → Deploy → New Deployment → Web App → Anyone
+//    3. Copy the URL and replace the line below
+const SYNC_SERVER='https://script.google.com/macros/s/AKfycbxkEwf1cPywZHxU3bIVMO6-ajsXORiFlWr4twDcRNlsFSmCcuOEiXwOOLz7j-KuxDU-YA/exec';
 
 function confirmRecord(btn){
   const data=JSON.parse(btn.getAttribute('data-record'));
@@ -369,13 +373,13 @@ function confirmRecord(btn){
   try{
     addRecord(data);
     card.remove();
-    // Try to sync to Tencent Docs via local server
+    // Try to sync to Google Sheets via Apps Script
     fetch(SYNC_SERVER,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
       .then(r=>r.json()).then(res=>{
-        if(res.success)addBotMsg('✅ 已记录并同步到腾讯文档！');
-        else addBotMsg('✅ 已记录（本地）！提示：启动同步服务后可自动同步到腾讯文档');
+        if(res.success)addBotMsg('✅ 已同步到 Google Sheets！');
+        else addBotMsg('✅ 已本地记录（同步失败：'+res.error+'）');
       }).catch(()=>{
-        addBotMsg('✅ 已记录（本地）！提示：启动同步服务后可自动同步到腾讯文档');
+        addBotMsg('✅ 已本地记录（离线模式）');
       });
     refreshSummary();
   }catch(e){
