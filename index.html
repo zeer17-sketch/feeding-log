@@ -259,19 +259,36 @@ function parseMessage(text){
   const volMatch=text.match(/(\d+)\s*(ml|毫升|ML|cc|CC|oz|安士)/i);
   if(volMatch){volume=volMatch[1];notes=notes.replace(volMatch[0],'').trim()}
 
-  const specificTime=text.match(/(\d{1,2})[：:](\d{2})/);
-  if(specificTime){
-    parsedTime=specificTime[1].padStart(2,'0')+':'+specificTime[2];
-    notes=notes.replace(specificTime[0],'').trim();
-  }else{
-    const offsets=[
-      {re:/刚刚|刚才/,o:0},
-      {re:/(\d+)\s*分钟前/,o:m=>-parseInt(m[1])},
-      {re:/(\d+)\s*小时前/,o:m=>-parseInt(m[1])*60}
-    ];
-    for(const{re,o}of offsets){
-      const m=text.match(re);
-      if(m){const off=typeof o==='function'?o(m):o;if(off!==0){const adj=new Date(now.getTime()+off*60000);parsedTime=adj.toTimeString().slice(0,5);if(off<-120)parsedDate=adj.toISOString().slice(0,10)}notes=notes.replace(m[0],'').trim();break}
+  // Chinese time: "11点", "11点30", "11点30分", "11点半"
+  let timeExtracted=false;
+  const cnTimeMatch=text.match(/(\d{1,2})点(\d{1,2})分?/);
+  const cnHalfMatch=text.match(/(\d{1,2})点半/);
+  const cnHourMatch=text.match(/(\d{1,2})点/);
+  if(cnTimeMatch){
+    parsedTime=cnTimeMatch[1].padStart(2,'0')+':'+cnTimeMatch[2].padStart(2,'0');
+    notes=notes.replace(cnTimeMatch[0],'').trim();timeExtracted=true;
+  }else if(cnHalfMatch){
+    parsedTime=cnHalfMatch[1].padStart(2,'0')+':30';
+    notes=notes.replace(cnHalfMatch[0],'').trim();timeExtracted=true;
+  }else if(cnHourMatch){
+    parsedTime=cnHourMatch[1].padStart(2,'0')+':00';
+    notes=notes.replace(cnHourMatch[0],'').trim();timeExtracted=true;
+  }
+  if(!timeExtracted){
+    const specificTime=text.match(/(\d{1,2})[：:](\d{2})/);
+    if(specificTime){
+      parsedTime=specificTime[1].padStart(2,'0')+':'+specificTime[2];
+      notes=notes.replace(specificTime[0],'').trim();
+    }else{
+      const offsets=[
+        {re:/刚刚|刚才/,o:0},
+        {re:/(\d+)\s*分钟前/,o:m=>-parseInt(m[1])},
+        {re:/(\d+)\s*小时前/,o:m=>-parseInt(m[1])*60}
+      ];
+      for(const{re,o}of offsets){
+        const m=text.match(re);
+        if(m){const off=typeof o==='function'?o(m):o;if(off!==0){const adj=new Date(now.getTime()+off*60000);parsedTime=adj.toTimeString().slice(0,5);if(off<-120)parsedDate=adj.toISOString().slice(0,10)}notes=notes.replace(m[0],'').trim();break}
+      }
     }
   }
 
