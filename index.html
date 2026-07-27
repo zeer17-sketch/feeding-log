@@ -364,7 +364,7 @@ function showConfirmCard(p){
 //    1. Open your Google Sheet → Extensions → Apps Script
 //    2. Paste apps-script.gs code → Deploy → New Deployment → Web App → Anyone
 //    3. Copy the URL and replace the line below
-const SYNC_SERVER='https://script.google.com/macros/s/AKfycbylyLh8rz_RVjq8t0bUEYKIH70sRryk7hLiPWUkrc24/dev';
+const SYNC_SERVER='https://script.google.com/macros/s/AKfycbylyLh8rz_RVjq8t0bUEYKIH70sRryk7hLiPWUkrc24/exec';
 
 function confirmRecord(btn){
   const data=JSON.parse(btn.getAttribute('data-record'));
@@ -375,8 +375,12 @@ function confirmRecord(btn){
     card.remove();
     // Sync to Google Sheets via GET (Image trick, no CORS)
     var d=encodeURIComponent(JSON.stringify(data));
-    new Image().src=SYNC_SERVER+'?sync=1&d='+d;
-    addBotMsg('✅ 已同步到 Google Sheets！');
+    window.__syncImgs=window.__syncImgs||[];
+    var img=new Image();
+    img.src=SYNC_SERVER+'?sync=1&d='+d;
+    window.__syncImgs.push(img);
+    setTimeout(function(){window.__syncImgs.shift();},5000);
+    addBotMsg('✅ 已提交同步请求（请在 Google Sheet 中确认）');
     refreshSummary();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ 确认记录';
