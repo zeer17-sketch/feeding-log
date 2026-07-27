@@ -373,10 +373,10 @@ function confirmRecord(btn){
   try{
     addRecord(data);
     card.remove();
-    // Sync to Google Sheets via sendBeacon (cross-origin, no CORS needed)
-    var blob=new Blob([JSON.stringify(data)],{type:'text/plain'});
-    var sent=navigator.sendBeacon(SYNC_SERVER,blob);
-    addBotMsg(sent?'✅ 已同步到 Google Sheets！':'✅ 已本地记录（同步失败，请重试）');
+    // Sync to Google Sheets via GET (Image trick, no CORS)
+    var d=encodeURIComponent(JSON.stringify(data));
+    new Image().src=SYNC_SERVER+'?sync=1&d='+d;
+    addBotMsg('✅ 已同步到 Google Sheets！');
     refreshSummary();
   }catch(e){
     btn.disabled=false;btn.textContent='✅ 确认记录';
