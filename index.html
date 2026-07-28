@@ -18,7 +18,18 @@ body{
   display:flex;align-items:center;justify-content:space-between;
 }
 .header .title{display:flex;align-items:center;gap:8px}
-.header .export-btn{background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 14px;border-radius:16px;font-size:13px;cursor:pointer}
+.header-controls{display:flex;align-items:center;gap:8px}
+.header .mini-btn{
+  background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 10px;
+  border-radius:14px;font-size:12px;cursor:pointer;line-height:1
+}
+.header .font-group{display:flex;background:rgba(255,255,255,.2);border-radius:14px;overflow:hidden}
+.header .font-group .mini-btn{background:transparent;border-radius:0;padding:6px 10px;min-width:34px}
+.header .font-group .mini-btn + .mini-btn{border-left:1px solid rgba(255,255,255,.35)}
+.msg.bot a{color:#2f78ff;text-decoration:underline}
+
+body.font-sm .msg,body.font-sm .card,body.font-sm .summary-card,body.font-sm .input-area input{font-size:13px}
+body.font-lg .msg,body.font-lg .card,body.font-lg .summary-card,body.font-lg .input-area input{font-size:16px}
 
 .chat-area{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
 
@@ -41,6 +52,13 @@ body{
 .card .card-title{font-size:13px;color:#07c160;font-weight:600;margin-bottom:8px}
 .card .row{display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:#333}
 .card .row .lbl{color:#999}
+.card .row.hidden{display:none}
+.card .row.edit{align-items:center;gap:8px}
+.card .row.edit .lbl{min-width:44px}
+.card .edit-input,.card .edit-select{
+  flex:1;min-width:0;border:1px solid #d9d9d9;border-radius:6px;
+  padding:6px 8px;font-size:13px;background:#fff;color:#333
+}
 .card .actions{display:flex;gap:8px;margin-top:10px}
 .card .btn{flex:1;padding:9px 0;border-radius:6px;border:none;font-size:14px;cursor:pointer;font-weight:500}
 .card .btn.confirm{background:#07c160;color:#fff}
@@ -54,7 +72,7 @@ body{
 .summary-card h3{font-size:15px;margin-bottom:10px;color:#2e7d32}
 .summary-card .stat{display:flex;gap:12px;margin-bottom:8px;justify-content:space-around}
 .summary-card .si{text-align:center}
-.summary-card .si .n{font-size:24px;font-weight:700;color:#333}
+.summary-card .si .n{font-size:15px;font-weight:500;color:#333}
 .summary-card .si .l{font-size:11px;color:#888}
 .summary-card .recent{margin-top:10px;border-top:1px solid rgba(0,0,0,.1);padding-top:8px}
 .summary-card .recent .rh{font-size:12px;color:#888;margin-bottom:4px}
@@ -100,20 +118,18 @@ body{
 <body>
 
 <div class="header">
-  <div class="title"><span style="font-size:22px">🍼</span> 喂奶记录助手</div>
-  <button class="export-btn" onclick="showExport()">📋 记录</button>
+  <div class="title"><span style="font-size:22px">🍼</span> <span id="appTitle">喂奶记录助手</span></div>
+  <div class="header-controls">
+    <div class="font-group" aria-label="Font size controls">
+      <button class="mini-btn" id="fontDownBtn" type="button">A-</button>
+      <button class="mini-btn" id="fontUpBtn" type="button">A+</button>
+    </div>
+    <button class="mini-btn" id="langBtn" type="button">EN</button>
+  </div>
 </div>
 
 <div class="chat-area" id="chatArea">
-  <div class="msg bot">
-    👋 你好！我是喂奶记录助手。<br><br>
-    你可以用<b>语音 🎤</b>或<b>文字</b>告诉我宝宝的情况。<br><br>
-    💬 试试说：<br>
-    • "刚刚喝了80毫升奶粉"<br>
-    • "上午11点喝了60ml，没打嗝"<br>
-    • "晚上8点半拉粑粑"<br>
-    • "下午3点喝了90毫升"
-  </div>
+  <div class="msg bot" id="welcomeMsg"></div>
   <div class="msg time" id="todayLabel"></div>
 </div>
 
@@ -127,17 +143,186 @@ body{
 
 <div class="modal-overlay" id="exportModal">
   <div class="modal">
-    <h3>📋 所有记录</h3>
+    <h3 id="modalTitle">📋 所有记录</h3>
     <div id="recordList" style="max-height:200px;overflow-y:auto"></div>
     <textarea class="csv-area" id="csvOutput" readonly placeholder="暂无记录"></textarea>
-    <button class="copy-btn" onclick="copyCSV()">📋 复制 CSV</button>
-    <button class="copy-btn" style="background:#576b95;margin-top:6px" onclick="downloadCSV()">💾 下载 CSV 文件</button>
-    <button class="close-btn" onclick="closeExport()">关闭</button>
+    <button class="copy-btn" id="copyBtn" onclick="copyCSV()">📋 复制 CSV</button>
+    <button class="copy-btn" id="downloadBtn" style="background:#576b95;margin-top:6px" onclick="downloadCSV()">💾 下载 CSV 文件</button>
+    <button class="close-btn" id="closeBtn" onclick="closeExport()">关闭</button>
   </div>
 </div>
 
 <script>
-const STORAGE_KEY = 'feeding_bot_records';
+const STORAGE_KEY='feeding_bot_records';
+const UI_LANG_KEY='feeding_bot_lang';
+const UI_FONT_KEY='feeding_bot_font';
+
+// 🔧 Paste your Google Apps Script Web App URL here:
+//    1. Open your Google Sheet -> Extensions -> Apps Script
+//    2. Paste apps-script.gs code -> Deploy -> New Deployment -> Web App -> Anyone
+//    3. Copy the URL and replace the line below
+const SYNC_SERVER='https://script.google.com/macros/s/AKfycbylyLh8rz_RVjq8t0bUEYKIH70sRryk7hLiPWUkrc24/exec';
+
+// 🔧 Paste your Google Sheet URL here for hyperlink in sync messages
+const GOOGLE_SHEET_URL='https://docs.google.com/spreadsheets/d/1xLyHnIfcBXxQFHC8Z84ZHnGA7yEPGF4Kd4mxugwJ0XI/edit?usp=sharing';
+
+const I18N={
+  zh:{
+    appTitle:'喂奶记录助手',
+    voiceListening:'🎤 正在聆听...请说话',
+    inputPlaceholder:'说说宝宝的情况...',
+    modalTitle:'📋 所有记录',
+    noRecords:'暂无记录',
+    copyCsv:'📋 复制 CSV',
+    downloadCsv:'💾 下载 CSV 文件',
+    close:'关闭',
+    todaySummary:'📊 今日汇总',
+    feedingCount:'喂奶次数',
+    totalVolume:'总奶量',
+    diaperCount:'拉粑粑',
+    recentRecords:'最近记录',
+    confirmTitle:'📋 识别结果确认',
+    lblDate:'日期',
+    lblTime:'时间',
+    lblEvent:'事件',
+    lblVolume:'奶量',
+    lblNotes:'备注',
+    btnCancel:'取消',
+    btnConfirm:'✅ 确认记录',
+    syncing:'同步中...',
+    recordFailed:'❌ 记录失败，请重试',
+    canceled:'已取消 👍',
+    syncSubmittedNoLink:'✅ 已提交同步请求，请在 Google Sheet 中确认。',
+    syncSubmittedPrefix:'✅ 已提交同步请求，查看 ',
+    localSaved:'✅ 已本地记录（未启用 Google 同步）',
+    unrecognizedHtml:'🤔 没有识别到喂奶或便便信息。<br><br>你可以这样说：<br>• "刚刚喝了80毫升奶粉"<br>• "上午11点喝了60ml，没打嗝"<br>• "晚上8点半拉了便便"',
+    voiceNoSpeech:'没有听到声音，请再试一次 🙉',
+    voiceNotAllowed:'麦克风权限未开启，请在浏览器设置中允许 📢',
+    voiceError:'语音识别出错，请用文字输入 📝',
+    deleteConfirm:'确定删除这条记录吗？',
+    csvCopied:'CSV 已复制到剪贴板！',
+    csvCopyFailed:'复制失败，请手动选择并复制',
+    downloadName:'喂奶记录.csv',
+    csvHeader:'Date 日期,Time 时间,Event 事件,Volume 奶量,Notes 备注',
+    weekdays:['日','一','二','三','四','五','六'],
+    eventLabels:{Feeding:'🍼 喂奶',Diaper:'💩 拉粑粑',Other:'📝 其他'},
+    eventPlain:{Feeding:'喂奶',Diaper:'拉粑粑',Other:'其他'},
+    welcomeHtml:'👋 你好！我是喂奶记录助手。<br><br>你可以用<b>语音 🎤</b>或<b>文字</b>告诉我宝宝的情况。<br><br>💬 试试说：<br>• "刚刚喝了80毫升奶粉"<br>• "上午11点喝了60ml，没打嗝"<br>• "晚上8点半拉了便便"'
+  },
+  en:{
+    appTitle:'Feeding Log Assistant',
+    voiceListening:'🎤 Listening... please speak',
+    inputPlaceholder:'Describe your baby update...',
+    modalTitle:'📋 All Records',
+    noRecords:'No records yet',
+    copyCsv:'📋 Copy CSV',
+    downloadCsv:'💾 Download CSV',
+    close:'Close',
+    todaySummary:'📊 Today Summary',
+    feedingCount:'Feedings',
+    totalVolume:'Total Volume',
+    diaperCount:'Diapers',
+    recentRecords:'Recent records',
+    confirmTitle:'📋 Confirm Recognition',
+    lblDate:'Date',
+    lblTime:'Time',
+    lblEvent:'Event',
+    lblVolume:'Volume',
+    lblNotes:'Notes',
+    btnCancel:'Cancel',
+    btnConfirm:'✅ Save',
+    syncing:'Syncing...',
+    recordFailed:'❌ Save failed, please retry',
+    canceled:'Canceled 👍',
+    syncSubmittedNoLink:'✅ Sync request submitted. Please check Google Sheet.',
+    syncSubmittedPrefix:'✅ Sync request submitted. Open ',
+    localSaved:'✅ Saved locally (Google sync disabled)',
+    unrecognizedHtml:'🤔 I could not detect feeding or diaper info.<br><br>Try saying:<br>• "Just fed 80 ml formula"<br>• "Fed 60 ml at 11:00, no burp"<br>• "Pooped at 20:30"',
+    voiceNoSpeech:'No speech detected, please try again 🙉',
+    voiceNotAllowed:'Microphone permission is blocked. Please allow it in browser settings 📢',
+    voiceError:'Speech recognition error. Please type your message 📝',
+    deleteConfirm:'Delete this record?',
+    csvCopied:'CSV copied to clipboard!',
+    csvCopyFailed:'Copy failed. Please select and copy manually',
+    downloadName:'feeding-log.csv',
+    csvHeader:'Date,Time,Event,Volume (ml),Notes',
+    weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+    eventLabels:{Feeding:'🍼 Feeding',Diaper:'💩 Diaper',Other:'📝 Other'},
+    eventPlain:{Feeding:'Feeding',Diaper:'Diaper',Other:'Other'},
+    welcomeHtml:'👋 Hi! I am your feeding log assistant.<br><br>You can tell me updates by <b>voice 🎤</b> or <b>text</b>.<br><br>💬 Try:<br>• "Just fed 80 ml formula"<br>• "Fed 60 ml at 11:00, no burp"<br>• "Pooped at 20:30"'
+  }
+};
+
+const chatArea=document.getElementById('chatArea');
+const textInput=document.getElementById('textInput');
+const sendBtn=document.getElementById('sendBtn');
+const voiceBtn=document.getElementById('voiceBtn');
+const voiceStatus=document.getElementById('voiceStatus');
+const appTitle=document.getElementById('appTitle');
+const welcomeMsg=document.getElementById('welcomeMsg');
+const modalTitle=document.getElementById('modalTitle');
+const copyBtn=document.getElementById('copyBtn');
+const downloadBtn=document.getElementById('downloadBtn');
+const closeBtn=document.getElementById('closeBtn');
+const langBtn=document.getElementById('langBtn');
+const fontDownBtn=document.getElementById('fontDownBtn');
+const fontUpBtn=document.getElementById('fontUpBtn');
+
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recognition=null;
+let isListening=false;
+let currentLang=localStorage.getItem(UI_LANG_KEY)||((navigator.language||'').toLowerCase().startsWith('zh')?'zh':'en');
+let currentFont=localStorage.getItem(UI_FONT_KEY)||'md';
+
+function t(key){return(I18N[currentLang]&&I18N[currentLang][key])||(I18N.zh&&I18N.zh[key])||key}
+function eventLabel(event){return t('eventLabels')[event]||event}
+function eventPlain(event){return t('eventPlain')[event]||event}
+function isCloudSyncEnabled(){return /^https:\/\/script\.google\.com\/macros\/s\/.+\/(exec|dev)$/i.test(SYNC_SERVER)}
+function getSheetLinkHtml(){
+  if(!/^https:\/\/docs\.google\.com\/spreadsheets\//i.test(GOOGLE_SHEET_URL))return '';
+  return `<a href="${GOOGLE_SHEET_URL}" target="_blank" rel="noopener">Google Sheet</a>`;
+}
+
+function normalizeInput(raw){
+  return(raw||'')
+    .replace(/[，、]/g,',')
+    .replace(/[。！!？?；;]/g,' ')
+    .replace(/[：]/g,':')
+    .replace(/\b(\d+)\s*m\s*l\b/ig,'$1ml')
+    .replace(/\b(\d+)\s*c\s*c\b/ig,'$1cc')
+    .replace(/毫\s*升/g,'毫升')
+    .replace(/点钟/g,'点')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+function sanitizeNotes(note,event){
+  let n=(note||'').trim();
+  const common=[
+    /\b(just now|just|at|around|about|baby|the baby|today)\b/ig,
+    /刚刚|刚才|宝宝|今天|刚/g,
+    /(^|\s)(点喝了|点喝|点喂了|点喂|点吃了|点吃)(?=\s|$)/g
+  ];
+  common.forEach(re=>{n=n.replace(re,' ')});
+
+  if(event==='Feeding'){
+    [
+      /喝了|喂了|吃了|喝奶|喂奶|吃奶|奶粉|母乳|亲喂|瓶喂|哺乳/g,
+      /\b(feed|fed|feeding|formula|bottle|milk|breastmilk|nursing)\b/ig
+    ].forEach(re=>{n=n.replace(re,' ')});
+  }
+  if(event==='Diaper'){
+    [
+      /拉粑粑|拉屎|大便|便便|拉臭|拉臭臭|换尿布|尿布|尿了|小便|嘘嘘|尿不湿|纸尿裤/g,
+      /\b(diaper|nappy|poop|pooped|pee|peed|stool|potty|dirty|wet)\b/ig
+    ].forEach(re=>{n=n.replace(re,' ')});
+  }
+
+  n=n.replace(/^[,，。.!！？\s]+|[,，。.!！？\s]+$/g,'').replace(/\s+/g,' ').trim();
+  if(/^(喝了|喂了|吃了|拉了|点喝了|点喝|点喂了|点喂|点吃了|点吃|feed|fed|feeding|poop|pooped|diaper|just|at|around|about)$/i.test(n))return '';
+  if(n.length<=1)return '';
+  return n;
+}
 
 function getRecords(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch(e){return[]}}
 function saveRecords(records){localStorage.setItem(STORAGE_KEY,JSON.stringify(records))}
@@ -156,120 +341,132 @@ function deleteRecord(id){
   saveRecords(records);
 }
 
-function getTodayRecords(){
-  const today=new Date().toISOString().slice(0,10);
-  return getRecords().filter(r=>r.date===today);
-}
-
 function getSummary(){
   const today=new Date().toISOString().slice(0,10);
   const records=getRecords().filter(r=>r.date===today);
   const feedings=records.filter(r=>r.event==='Feeding');
   const diapers=records.filter(r=>r.event==='Diaper');
   return{
-    date:today,feedingCount:feedings.length,diaperCount:diapers.length,
+    date:today,
+    feedingCount:feedings.length,
+    diaperCount:diapers.length,
     totalVolume:feedings.reduce((s,r)=>s+(parseFloat(r.volume)||0),0),
     records:records.sort((a,b)=>b.time.localeCompare(a.time))
   };
 }
 
-// Chat UI
-const chatArea=document.getElementById('chatArea');
-const textInput=document.getElementById('textInput');
-const sendBtn=document.getElementById('sendBtn');
-const voiceBtn=document.getElementById('voiceBtn');
-const voiceStatus=document.getElementById('voiceStatus');
-
-const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-let recognition=null,isListening=false;
-
 function initSpeech(){
   if(!SpeechRecognition){voiceBtn.style.display='none';return}
   recognition=new SpeechRecognition();
-  recognition.lang='zh-CN';
-  recognition.interimResults=false;
+  recognition.lang=currentLang==='zh'?'zh-CN':'en-US';
+  recognition.interimResults=true;
   recognition.continuous=false;
-  recognition.maxAlternatives=1;
+  recognition.maxAlternatives=3;
   recognition.onresult=e=>{
-    const text=e.results[0][0].transcript.trim();
+    const rs=e.results[e.results.length-1];
+    if(!rs||!rs.isFinal)return;
+    const text=normalizeInput(rs[0].transcript.trim());
     stopListening();
     if(text)addUserMsg(text);
   };
   recognition.onerror=e=>{
     stopListening();
-    if(e.error==='no-speech')addBotMsg('没有听到声音，请再试一次 🙉');
-    else if(e.error==='not-allowed')addBotMsg('麦克风权限未开启，请在浏览器设置中允许 📢');
-    else addBotMsg('语音识别出错，请用文字输入 📝');
+    if(e.error==='no-speech')addBotMsg(t('voiceNoSpeech'));
+    else if(e.error==='not-allowed')addBotMsg(t('voiceNotAllowed'));
+    else addBotMsg(t('voiceError'));
   };
   recognition.onend=()=>stopListening();
 }
 
 function startListening(){
   if(!recognition||isListening)return;
-  try{isListening=true;voiceBtn.classList.add('listening');voiceBtn.textContent='🔴';voiceStatus.style.display='block';recognition.start()}catch(e){stopListening()}
+  try{
+    recognition.lang=currentLang==='zh'?'zh-CN':'en-US';
+    isListening=true;
+    voiceBtn.classList.add('listening');
+    voiceBtn.textContent='🔴';
+    voiceStatus.style.display='block';
+    recognition.start();
+  }catch(e){stopListening()}
 }
+
 function stopListening(){
-  isListening=false;voiceBtn.classList.remove('listening');voiceBtn.textContent='🎤';voiceStatus.style.display='none';
-  try{recognition.stop()}catch(e){}
-}
-
-voiceBtn.addEventListener('click',()=>isListening?stopListening():startListening());
-sendBtn.addEventListener('click',sendMessage);
-textInput.addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage()});
-
-function sendMessage(){
-  const text=textInput.value.trim();
-  if(!text)return;
-  textInput.value='';
-  addUserMsg(text);
+  isListening=false;
+  voiceBtn.classList.remove('listening');
+  voiceBtn.textContent='🎤';
+  voiceStatus.style.display='none';
+  try{recognition&&recognition.stop()}catch(e){}
 }
 
 function addUserMsg(text){
-  const div=document.createElement('div');div.className='msg user';div.textContent=text;
-  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+  const div=document.createElement('div');
+  div.className='msg user';
+  div.textContent=text;
+  chatArea.appendChild(div);
+  chatArea.scrollTop=chatArea.scrollHeight;
   processMessage(text);
 }
 
-function addBotMsg(text){
-  const div=document.createElement('div');div.className='msg bot';div.textContent=text;
-  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+function addBotMsg(text,asHtml=false){
+  const div=document.createElement('div');
+  div.className='msg bot';
+  if(asHtml)div.innerHTML=text;else div.textContent=text;
+  chatArea.appendChild(div);
+  chatArea.scrollTop=chatArea.scrollHeight;
 }
 
 function showTyping(){
-  const div=document.createElement('div');div.className='typing';div.id='typingIndicator';
+  const div=document.createElement('div');
+  div.className='typing';
+  div.id='typingIndicator';
   div.innerHTML='<span></span><span></span><span></span>';
-  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+  chatArea.appendChild(div);
+  chatArea.scrollTop=chatArea.scrollHeight;
 }
-function hideTyping(){const el=document.getElementById('typingIndicator');if(el)el.remove()}
 
-// NLP Parser
-function parseMessage(text){
+function hideTyping(){
+  const el=document.getElementById('typingIndicator');
+  if(el)el.remove();
+}
+
+function parseMessage(rawText){
+  const text=normalizeInput(rawText);
   const now=new Date();
   const today=now.toISOString().slice(0,10);
   const currentTime=now.toTimeString().slice(0,5);
-  let event='',volume='',notes=text,parsedTime=currentTime,parsedDate=today;
 
-  const feedingKW=/喝了|喂了|吃了|喝了|奶粉|母乳|喝奶|喂奶|吃奶|吸奶|亲喂|瓶喂|哺乳|nienie|neinei/i;
-  const diaperKW=/拉粑粑|拉屎|大便|便便|拉臭|💩|换尿布|尿布|尿了|小便|嘘嘘|pee|poop|拉臭臭|尿不湿|纸尿裤/i;
+  let event='';
+  let volume='';
+  let notes=text;
+  let parsedTime=currentTime;
+  let parsedDate=today;
+
+  const feedingKW=/喝了|喂了|吃了|奶粉|母乳|喝奶|喂奶|吃奶|吸奶|亲喂|瓶喂|哺乳|feed|fed|feeding|formula|breastmilk|bottle|nursing|milk/i;
+  const diaperKW=/拉粑粑|拉屎|大便|便便|拉臭|换尿布|尿布|尿了|小便|嘘嘘|拉臭臭|尿不湿|纸尿裤|pee|poop|diaper|nappy|stool|potty|wet diaper|dirty diaper/i;
 
   if(feedingKW.test(text))event='Feeding';
   else if(diaperKW.test(text))event='Diaper';
-  else if(/\d+\s*(ml|毫升|ML|cc|CC|oz)/.test(text))event='Feeding';
+  else if(/\d+(?:\.\d+)?\s*(ml|毫升|cc|oz|ounce|ounces)/i.test(text))event='Feeding';
   else event='Other';
 
-  const volMatch=text.match(/(\d+)\s*(ml|毫升|ML|cc|CC|oz|安士)/i);
-  if(volMatch){volume=volMatch[1];notes=notes.replace(volMatch[0],'').trim()}
+  const volMatch=text.match(/(\d+(?:\.\d+)?)\s*(ml|毫升|cc|oz|ounce|ounces)/i);
+  if(volMatch){
+    const val=parseFloat(volMatch[1]);
+    const unit=volMatch[2].toLowerCase();
+    volume=(unit==='oz'||unit==='ounce'||unit==='ounces')?String(Math.round(val*29.57)):String(Math.round(val));
+    notes=notes.replace(volMatch[0],'').trim();
+  }
 
-  // --- Time parsing with AM/PM support ---
   let timeExtracted=false;
   const curH=now.getHours();
+
   function to24h(h,pref){
-    if(!pref)return h;
-    if(/早上|上午|凌晨|早晨|am/i.test(pref))return h===12?0:h;
-    if(/中午|正午|noon/i.test(pref))return 12;
-    if(/下午|晚上|傍晚|夜里|pm/i.test(pref))return h===12?12:h+12;
+    if(/am|morning|早上|上午|凌晨|早晨/i.test(pref))return h===12?0:h;
+    if(/noon|中午|正午/i.test(pref))return 12;
+    if(/pm|afternoon|evening|night|下午|晚上|傍晚|夜里/i.test(pref))return h===12?12:h+12;
     return h;
   }
+
   function infer24h(h){
     if(h>=13)return h;
     const pmH=h+12;
@@ -277,54 +474,76 @@ function parseMessage(text){
     return h;
   }
 
-  // Try AM/PM prefixed: "上午11点30分", "下午3点半", "晚上8点"
-  const pfTime=text.match(/(早上|上午|凌晨|早晨|中午|正午|下午|晚上|傍晚|夜里)\s*(\d{1,2})点(?:(\d{1,2})分?)?/i);
-  const pfHalf=text.match(/(早上|上午|凌晨|早晨|中午|正午|下午|晚上|傍晚|夜里)\s*(\d{1,2})点半/i);
-  if(pfTime||pfHalf){
-    const m=pfTime||pfHalf;
-    const h24=to24h(parseInt(m[2]),m[1]);
-    const min=pfHalf?'30':(pfTime&&pfTime[3]?pfTime[3].padStart(2,'0'):'00');
+  const enAmPm=text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  if(enAmPm){
+    const h24=to24h(parseInt(enAmPm[1],10),enAmPm[3]);
+    const min=(enAmPm[2]||'00').padStart(2,'0');
     parsedTime=String(h24).padStart(2,'0')+':'+min;
-    notes=notes.replace(m[0],'').trim();timeExtracted=true;
+    notes=notes.replace(enAmPm[0],'').trim();
+    timeExtracted=true;
   }
 
   if(!timeExtracted){
-    // Bare Chinese hour: "11点", "11点30", "11点半"
+    const pfTime=text.match(/(早上|上午|凌晨|早晨|中午|正午|下午|晚上|傍晚|夜里)\s*(\d{1,2})点(?:(\d{1,2})分?)?/i);
+    const pfHalf=text.match(/(早上|上午|凌晨|早晨|中午|正午|下午|晚上|傍晚|夜里)\s*(\d{1,2})点半/i);
+    if(pfTime||pfHalf){
+      const m=pfTime||pfHalf;
+      const h24=to24h(parseInt(m[2],10),m[1]);
+      const min=pfHalf?'30':(pfTime&&pfTime[3]?pfTime[3].padStart(2,'0'):'00');
+      parsedTime=String(h24).padStart(2,'0')+':'+min;
+      notes=notes.replace(m[0],'').trim();
+      timeExtracted=true;
+    }
+  }
+
+  if(!timeExtracted){
     const cnTimeMatch=text.match(/(\d{1,2})点(\d{1,2})分?/);
     const cnHalfMatch=text.match(/(\d{1,2})点半/);
     const cnHourMatch=text.match(/(\d{1,2})点/);
     if(cnTimeMatch||cnHalfMatch||cnHourMatch){
       let match,h,min='00';
-      if(cnTimeMatch){match=cnTimeMatch;h=parseInt(match[1]);min=match[2].padStart(2,'0');}
-      else if(cnHalfMatch){match=cnHalfMatch;h=parseInt(match[1]);min='30';}
-      else{match=cnHourMatch;h=parseInt(match[1]);}
+      if(cnTimeMatch){match=cnTimeMatch;h=parseInt(match[1],10);min=match[2].padStart(2,'0');}
+      else if(cnHalfMatch){match=cnHalfMatch;h=parseInt(match[1],10);min='30';}
+      else{match=cnHourMatch;h=parseInt(match[1],10);}
       h=infer24h(h);
       parsedTime=String(h).padStart(2,'0')+':'+min;
-      notes=notes.replace(match[0],'').trim();timeExtracted=true;
+      notes=notes.replace(match[0],'').trim();
+      timeExtracted=true;
     }
   }
 
   if(!timeExtracted){
-    const specificTime=text.match(/(\d{1,2})[：:](\d{2})/);
-    if(specificTime){
-      let h=parseInt(specificTime[1]),m=specificTime[2];
+    const hhmm=text.match(/\b(\d{1,2})[:](\d{2})\b/);
+    if(hhmm){
+      let h=parseInt(hhmm[1],10);
       h=infer24h(h);
-      parsedTime=String(h).padStart(2,'0')+':'+m;
-      notes=notes.replace(specificTime[0],'').trim();
-    }else{
-      const offsets=[
-        {re:/刚刚|刚才/,o:0},
-        {re:/(\d+)\s*分钟前/,o:m=>-parseInt(m[1])},
-        {re:/(\d+)\s*小时前/,o:m=>-parseInt(m[1])*60}
-      ];
-      for(const{re,o}of offsets){
-        const m=text.match(re);
-        if(m){const off=typeof o==='function'?o(m):o;if(off!==0){const adj=new Date(now.getTime()+off*60000);parsedTime=adj.toTimeString().slice(0,5);if(off<-120)parsedDate=adj.toISOString().slice(0,10)}notes=notes.replace(m[0],'').trim();break}
-      }
+      parsedTime=String(h).padStart(2,'0')+':'+hhmm[2];
+      notes=notes.replace(hhmm[0],'').trim();
+      timeExtracted=true;
     }
   }
 
-  notes=notes.replace(/^[，,。\.！!\s]+/,'').replace(/[，,。\.！!\s]+$/,'').trim();
+  if(!timeExtracted){
+    const offsets=[
+      {re:/刚刚|刚才|just now/i,o:0},
+      {re:/(\d+)\s*分钟前|(?:about\s*)?(\d+)\s*min(?:ute)?s?\s*ago/i,o:m=>-parseInt(m[1]||m[2],10)},
+      {re:/(\d+)\s*小时前|(?:about\s*)?(\d+)\s*hour(?:s)?\s*ago/i,o:m=>-parseInt(m[1]||m[2],10)*60}
+    ];
+    for(const item of offsets){
+      const m=text.match(item.re);
+      if(!m)continue;
+      const off=typeof item.o==='function'?item.o(m):item.o;
+      if(off!==0){
+        const adj=new Date(now.getTime()+off*60000);
+        parsedTime=adj.toTimeString().slice(0,5);
+        if(off<=-120)parsedDate=adj.toISOString().slice(0,10);
+      }
+      notes=notes.replace(m[0],'').trim();
+      break;
+    }
+  }
+
+  notes=sanitizeNotes(notes,event);
   return{date:parsedDate,time:parsedTime,event,volume:volume||'',notes};
 }
 
@@ -334,135 +553,249 @@ function processMessage(text){
     hideTyping();
     const parsed=parseMessage(text);
     if(parsed.event==='Other'){
-      addBotMsg('🤔 没有识别到喂奶或拉粑粑信息。\n\n你可以这样说：\n• "喝了80毫升奶粉"\n• "上午11点喝了60ml"\n• "晚上8点半拉粑粑"');
+      addBotMsg(t('unrecognizedHtml'),true);
       return;
     }
     showConfirmCard(parsed);
-  },500);
+  },350);
+}
+
+function escAttr(v){
+  return String(v||'')
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+function updateVolumeFieldVisibility(card,clearWhenHidden){
+  const eventVal=(card.querySelector('.js-event')?.value||'Other').trim();
+  const volRow=card.querySelector('.js-volume-row');
+  const volInput=card.querySelector('.js-volume');
+  const showVolume=eventVal==='Feeding';
+  if(volRow)volRow.classList.toggle('hidden',!showVolume);
+  if(volInput&&!showVolume&&clearWhenHidden)volInput.value='';
 }
 
 function showConfirmCard(p){
-  const el={Feeding:'🍼 喂奶',Diaper:'💩 拉粑粑',Other:'📝 其他'};
-  const div=document.createElement('div');div.className='card';
+  const plain=t('eventPlain');
+  const div=document.createElement('div');
+  div.className='card';
+  div.setAttribute('data-date',p.date);
   div.innerHTML=`
-    <div class="card-title">📋 识别结果确认</div>
-    <div class="row"><span class="lbl">日期</span><span>${p.date}</span></div>
-    <div class="row"><span class="lbl">时间</span><span>${p.time}</span></div>
-    <div class="row"><span class="lbl">事件</span><span>${el[p.event]}</span></div>
-    ${p.volume?`<div class="row"><span class="lbl">奶量</span><span>${p.volume} ml</span></div>`:''}
-    ${p.notes?`<div class="row"><span class="lbl">备注</span><span>${p.notes}</span></div>`:''}
+    <div class="card-title">${t('confirmTitle')}</div>
+    <div class="row"><span class="lbl">${t('lblDate')}</span><span>${p.date}</span></div>
+    <div class="row edit"><span class="lbl">${t('lblTime')}</span><input class="edit-input js-time" type="time" value="${escAttr(p.time)}"></div>
+    <div class="row edit"><span class="lbl">${t('lblEvent')}</span>
+      <select class="edit-select js-event">
+        <option value="Feeding" ${p.event==='Feeding'?'selected':''}>${plain.Feeding}</option>
+        <option value="Diaper" ${p.event==='Diaper'?'selected':''}>${plain.Diaper}</option>
+        <option value="Other" ${p.event==='Other'?'selected':''}>${plain.Other}</option>
+      </select>
+    </div>
+    <div class="row edit js-volume-row"><span class="lbl">${t('lblVolume')}</span><input class="edit-input js-volume" type="text" inputmode="decimal" value="${escAttr(p.volume||'')}"></div>
+    <div class="row edit"><span class="lbl">${t('lblNotes')}</span><input class="edit-input js-notes" type="text" value="${escAttr(p.notes||'')}"></div>
     <div class="actions">
-      <button class="btn cancel" onclick="cancelRecord(this)">取消</button>
-      <button class="btn confirm" onclick="confirmRecord(this)">✅ 确认记录</button>
+      <button class="btn cancel" onclick="cancelRecord(this)">${t('btnCancel')}</button>
+      <button class="btn confirm" onclick="confirmRecord(this)">${t('btnConfirm')}</button>
     </div>`;
-  const data={date:p.date,time:p.time,event:p.event,volume:p.volume,notes:p.notes};
-  div.querySelector('.btn.confirm').setAttribute('data-record',JSON.stringify(data));
-  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+  const eventSelect=div.querySelector('.js-event');
+  if(eventSelect){
+    eventSelect.addEventListener('change',()=>updateVolumeFieldVisibility(div,true));
+  }
+  updateVolumeFieldVisibility(div,false);
+  chatArea.appendChild(div);
+  chatArea.scrollTop=chatArea.scrollHeight;
 }
 
-// 🔧 Paste your Google Apps Script Web App URL here:
-//    1. Open your Google Sheet → Extensions → Apps Script
-//    2. Paste apps-script.gs code → Deploy → New Deployment → Web App → Anyone
-//    3. Copy the URL and replace the line below
-const SYNC_SERVER='https://script.google.com/macros/s/AKfycbylyLh8rz_RVjq8t0bUEYKIH70sRryk7hLiPWUkrc24/exec';
-
 function confirmRecord(btn){
-  const data=JSON.parse(btn.getAttribute('data-record'));
-  btn.disabled=true;btn.textContent='同步中...';
+  btn.disabled=true;
+  btn.textContent=t('syncing');
   const card=btn.closest('.card');
   try{
+    const date=(card.getAttribute('data-date')||new Date().toISOString().slice(0,10)).trim();
+    let time=(card.querySelector('.js-time')?.value||'').trim();
+    if(!/^\d{2}:\d{2}$/.test(time))time=new Date().toTimeString().slice(0,5);
+
+    const eventRaw=(card.querySelector('.js-event')?.value||'Other').trim();
+    const event=['Feeding','Diaper','Other'].includes(eventRaw)?eventRaw:'Other';
+
+    let volume=(card.querySelector('.js-volume')?.value||'').trim();
+    volume=volume.replace(/[^\d.]/g,'');
+    if(volume&&volume.includes('.'))volume=String(Math.round(parseFloat(volume)||0));
+    if(volume==='0')volume='';
+    if(event!=='Feeding')volume='';
+
+    const notes=(card.querySelector('.js-notes')?.value||'').trim();
+    const data={date,time,event,volume,notes};
+
     addRecord(data);
     card.remove();
-    // Sync to Google Sheets via GET (Image trick, no CORS)
-    var d=encodeURIComponent(JSON.stringify(data));
-    window.__syncImgs=window.__syncImgs||[];
-    var img=new Image();
-    img.src=SYNC_SERVER+'?sync=1&d='+d+'&t='+Date.now();
-    window.__syncImgs.push(img);
-    setTimeout(function(){window.__syncImgs.shift();},5000);
-    addBotMsg('✅ 已提交同步请求（请在 Google Sheet 中确认）');
+    if(isCloudSyncEnabled()){
+      const d=encodeURIComponent(JSON.stringify(data));
+      window.__syncImgs=window.__syncImgs||[];
+      const img=new Image();
+      img.src=SYNC_SERVER+'?sync=1&d='+d+'&t='+Date.now();
+      window.__syncImgs.push(img);
+      setTimeout(()=>{window.__syncImgs.shift()},5000);
+      const link=getSheetLinkHtml();
+      if(link)addBotMsg(t('syncSubmittedPrefix')+link,true);
+      else addBotMsg(t('syncSubmittedNoLink'));
+    }else{
+      addBotMsg(t('localSaved'));
+    }
     refreshSummary();
   }catch(e){
-    btn.disabled=false;btn.textContent='✅ 确认记录';
-    addBotMsg('❌ 记录失败，请重试');
+    btn.disabled=false;
+    btn.textContent=t('btnConfirm');
+    addBotMsg(t('recordFailed'));
   }
 }
 
-function cancelRecord(btn){btn.closest('.card').remove();addBotMsg('已取消 👍')}
+function cancelRecord(btn){
+  btn.closest('.card').remove();
+  addBotMsg(t('canceled'));
+}
 
 function refreshSummary(){
   const s=getSummary();
-  const el={Feeding:'🍼 喂奶',Diaper:'💩 拉粑粑',Other:'📝 其他'};
   const existing=document.getElementById('summaryCard');
   if(existing)existing.remove();
 
-  const div=document.createElement('div');div.className='summary-card';div.id='summaryCard';
+  const div=document.createElement('div');
+  div.className='summary-card';
+  div.id='summaryCard';
   const recentHtml=s.records.slice(0,3).map(r=>
-    `<div class="ri">${r.time} ${el[r.event]||r.event} ${r.volume?r.volume+'ml':''} ${r.notes?'· '+r.notes:''}</div>`
+    `<div class="ri">${r.time} ${eventLabel(r.event)} ${r.volume?r.volume+'ml':''} ${r.notes?'· '+r.notes:''}</div>`
   ).join('');
 
   div.innerHTML=`
-    <h3>📊 今日汇总 (${s.date})</h3>
+    <h3>${t('todaySummary')} (${s.date})</h3>
     <div class="stat">
-      <div class="si"><div class="n">${s.feedingCount}</div><div class="l">喂奶次数</div></div>
-      <div class="si"><div class="n">${s.totalVolume}ml</div><div class="l">总奶量</div></div>
-      <div class="si"><div class="n">${s.diaperCount}</div><div class="l">拉粑粑</div></div>
+      <div class="si"><div class="n">${s.feedingCount}</div><div class="l">${t('feedingCount')}</div></div>
+      <div class="si"><div class="n">${s.totalVolume}ml</div><div class="l">${t('totalVolume')}</div></div>
+      <div class="si"><div class="n">${s.diaperCount}</div><div class="l">${t('diaperCount')}</div></div>
     </div>
-    ${recentHtml?`<div class="recent"><div class="rh">最近记录</div>${recentHtml}</div>`:''}
+    ${recentHtml?`<div class="recent"><div class="rh">${t('recentRecords')}</div>${recentHtml}</div>`:''}
   `;
-  chatArea.appendChild(div);chatArea.scrollTop=chatArea.scrollHeight;
+  chatArea.appendChild(div);
+  chatArea.scrollTop=chatArea.scrollHeight;
 }
 
-// Export
 function showExport(){
   const records=getRecords().sort((a,b)=>b.date.localeCompare(a.date)||b.time.localeCompare(a.time));
-  const el={Feeding:'喂奶',Diaper:'拉粑粑',Other:'其他'};
   const listEl=document.getElementById('recordList');
-  if(records.length===0){listEl.innerHTML='<p style="text-align:center;color:#999;padding:20px">暂无记录</p>'}
-  else{
+  if(records.length===0){
+    listEl.innerHTML=`<p style="text-align:center;color:#999;padding:20px">${t('noRecords')}</p>`;
+  }else{
     listEl.innerHTML=records.map(r=>
       `<div class="record-item">
-        <span>${r.date} ${r.time} ${el[r.event]||r.event} ${r.volume?r.volume+'ml':''}</span>
+        <span>${r.date} ${r.time} ${eventPlain(r.event)} ${r.volume?r.volume+'ml':''}</span>
         <button class="del" onclick="delRecord('${r.id}')">🗑</button>
       </div>`
     ).join('');
   }
 
-  const csv='Date 日期,Time 时间,Event 事件,Volume 奶量,Notes 备注\n'+records.map(r=>
-    `${r.date},${r.time},${r.event},${r.volume},${r.notes}`
+  const csv=t('csvHeader')+'\n'+records.map(r=>
+    `${r.date},${r.time},${r.event},${r.volume},${(r.notes||'').replace(/,/g,' ')}`
   ).join('\n');
 
   document.getElementById('csvOutput').value=csv;
   document.getElementById('exportModal').classList.add('show');
 }
 
-function closeExport(){document.getElementById('exportModal').classList.remove('show');refreshSummary()}
+function closeExport(){
+  document.getElementById('exportModal').classList.remove('show');
+  refreshSummary();
+}
 
 function delRecord(id){
-  if(!confirm('确定删除这条记录吗？'))return;
-  deleteRecord(id);showExport();
+  if(!confirm(t('deleteConfirm')))return;
+  deleteRecord(id);
+  showExport();
 }
 
 function copyCSV(){
   const csv=document.getElementById('csvOutput').value;
-  navigator.clipboard.writeText(csv).then(()=>alert('CSV 已复制到剪贴板！可以粘贴到 Excel 或腾讯文档中。')).catch(()=>alert('复制失败，请手动选择并复制'));
+  navigator.clipboard.writeText(csv)
+    .then(()=>alert(t('csvCopied')))
+    .catch(()=>alert(t('csvCopyFailed')));
 }
 
 function downloadCSV(){
   const csv=document.getElementById('csvOutput').value;
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='喂奶记录.csv';a.click();
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=t('downloadName');
+  a.click();
   URL.revokeObjectURL(url);
 }
 
-// Init
-(function(){
+function setTodayLabel(){
   const now=new Date();
-  const days=['日','一','二','三','四','五','六'];
-  document.getElementById('todayLabel').textContent=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${days[now.getDay()]}`;
-  initSpeech();
+  if(currentLang==='zh'){
+    document.getElementById('todayLabel').textContent=`${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${t('weekdays')[now.getDay()]}`;
+  }else{
+    const mm=String(now.getMonth()+1).padStart(2,'0');
+    const dd=String(now.getDate()).padStart(2,'0');
+    document.getElementById('todayLabel').textContent=`${now.getFullYear()}-${mm}-${dd} ${t('weekdays')[now.getDay()]}`;
+  }
+}
+
+function applyLanguage(){
+  localStorage.setItem(UI_LANG_KEY,currentLang);
+  document.documentElement.lang=currentLang==='zh'?'zh-CN':'en';
+  document.title=t('appTitle');
+  appTitle.textContent=t('appTitle');
+  welcomeMsg.innerHTML=t('welcomeHtml');
+  voiceStatus.textContent=t('voiceListening');
+  textInput.placeholder=t('inputPlaceholder');
+  modalTitle.textContent=t('modalTitle');
+  document.getElementById('csvOutput').placeholder=t('noRecords');
+  copyBtn.textContent=t('copyCsv');
+  downloadBtn.textContent=t('downloadCsv');
+  closeBtn.textContent=t('close');
+  langBtn.textContent=currentLang==='zh'?'EN':'中';
+  setTodayLabel();
   refreshSummary();
+  if(recognition)recognition.lang=currentLang==='zh'?'zh-CN':'en-US';
+}
+
+function applyFont(){
+  document.body.classList.remove('font-sm','font-md','font-lg');
+  document.body.classList.add('font-'+currentFont);
+  localStorage.setItem(UI_FONT_KEY,currentFont);
+}
+
+function changeFont(step){
+  const levels=['sm','md','lg'];
+  let idx=levels.indexOf(currentFont);
+  if(idx<0)idx=1;
+  idx=Math.max(0,Math.min(levels.length-1,idx+step));
+  currentFont=levels[idx];
+  applyFont();
+}
+
+voiceBtn.addEventListener('click',()=>isListening?stopListening():startListening());
+sendBtn.addEventListener('click',sendMessage);
+textInput.addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage()});
+langBtn.addEventListener('click',()=>{currentLang=currentLang==='zh'?'en':'zh';applyLanguage()});
+fontDownBtn.addEventListener('click',()=>changeFont(-1));
+fontUpBtn.addEventListener('click',()=>changeFont(1));
+
+function sendMessage(){
+  const text=normalizeInput(textInput.value.trim());
+  if(!text)return;
+  textInput.value='';
+  addUserMsg(text);
+}
+
+(function init(){
+  initSpeech();
+  applyFont();
+  applyLanguage();
 })();
 </script>
 </body>
