@@ -73,7 +73,7 @@ body.font-xl .msg,body.font-xl .card,body.font-xl .summary-card,body.font-xl .in
 .summary-card h3{font-size:1em;margin-bottom:10px;color:#2e7d32;font-weight:600}
 .summary-card .stat{display:flex;gap:12px;margin-bottom:8px;justify-content:space-around}
 .summary-card .si{text-align:center}
-.summary-card .si .n{font-size:1em;font-weight:500;color:#333}
+.summary-card .si .n{font-size:1.15em;font-weight:600;color:#333}
 .summary-card .si .l{font-size:1em;color:#555}
 .summary-card .recent{margin-top:10px;border-top:1px solid rgba(0,0,0,.1);padding-top:8px}
 .summary-card .recent .rh{font-size:1em;color:#555;margin-bottom:4px}
@@ -676,6 +676,7 @@ function normalizeSummaryData(raw){
     diaperCount:parseInt(raw.diaperCount,10)||0,
     totalVolume:parseInt(raw.totalVolume,10)||0,
     records:safeRecords.map(r=>({
+      date:String((r&&r.date)||raw.date||fallback.date),
       time:String((r&&r.time)||''),
       event:String((r&&r.event)||'Other'),
       volume:String((r&&r.volume)||''),
@@ -729,6 +730,60 @@ function fetchCloudSummary(){
   });
 }
 
+function parseSummaryDateParts(dateStr){
+  const m=String(dateStr||'').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(!m)return null;
+  return {y:parseInt(m[1],10),m:parseInt(m[2],10),d:parseInt(m[3],10)};
+}
+
+function formatSummaryDateMd(dateStr){
+  const p=parseSummaryDateParts(dateStr);
+  if(p)return `${p.m}/${p.d}`;
+  const dt=new Date(dateStr);
+  if(!isNaN(dt.getTime()))return `${dt.getMonth()+1}/${dt.getDate()}`;
+  return '';
+}
+
+function parseSummaryTimeParts(timeRaw){
+  const s=String(timeRaw||'').trim();
+  const hhmm=s.match(/^(\d{1,2}):(\d{2})/);
+  if(hhmm)return {h:Math.max(0,Math.min(23,parseInt(hhmm[1],10))),m:Math.max(0,Math.min(59,parseInt(hhmm[2],10)))};
+  const loose=s.match(/(\d{1,2}):(\d{2})/);
+  if(loose)return {h:Math.max(0,Math.min(23,parseInt(loose[1],10))),m:Math.max(0,Math.min(59,parseInt(loose[2],10)))};
+  const dt=new Date(s);
+  if(!isNaN(dt.getTime()))return {h:dt.getHours(),m:dt.getMinutes()};
+  return null;
+}
+
+function formatSummaryTimeAmPm(h,m){
+  const hour=((h%12)||12);
+  const mm=String(m).padStart(2,'0');
+  const ap=h>=12?'pm':'am';
+  return `${hour}:${mm} ${ap}`;
+}
+
+function buildRecentRecordMeta(r,summaryDate){
+  const dateText=formatSummaryDateMd(r.date||summaryDate);
+  const dateParts=parseSummaryDateParts(r.date||summaryDate);
+  const timeParts=parseSummaryTimeParts(r.time);
+  let sortTs=0;
+  let timeText=String(r.time||'').trim();
+
+  if(timeParts){
+    timeText=formatSummaryTimeAmPm(timeParts.h,timeParts.m);
+    if(dateParts){
+      sortTs=new Date(dateParts.y,dateParts.m-1,dateParts.d,timeParts.h,timeParts.m,0,0).getTime();
+    }else{
+      sortTs=(timeParts.h*60)+timeParts.m;
+    }
+  }
+
+  return {
+    sortTs:sortTs,
+    text:`${dateText?dateText+' ':''}${timeText} ${eventLabel(r.event)} ${r.volume?r.volume+' ml':''} ${r.notes?'· '+r.notes:''}`.replace(/\s+/g,' ').trim()
+  };
+}
+
 function renderSummary(s){
   const existing=document.getElementById('summaryCard');
   if(existing)existing.remove();
@@ -736,9 +791,12 @@ function renderSummary(s){
   const div=document.createElement('div');
   div.className='summary-card';
   div.id='summaryCard';
-  const recentHtml=(s.records||[]).slice(0,3).map(r=>
-    `<div class="ri">${r.time} ${eventLabel(r.event)} ${r.volume?r.volume+'ml':''} ${r.notes?'· '+r.notes:''}</div>`
-  ).join('');
+  const recentRecords=(s.records||[])
+    .map(r=>buildRecentRecordMeta(r,s.date))
+    .sort((a,b)=>b.sortTs-a.sortTs)
+    .slice(0,3)
+    .sort((a,b)=>a.sortTs-b.sortTs);
+  const recentHtml=recentRecords.map(r=>`<div class="ri">${r.text}</div>`).join('');
 
   div.innerHTML=`
     <h3>${t('todaySummary')} (${s.date})</h3>

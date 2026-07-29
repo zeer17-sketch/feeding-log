@@ -187,10 +187,19 @@ function normalizeDateCell_(cell, tz) {
 }
 
 function normalizeTimeCell_(cell) {
+  if (Object.prototype.toString.call(cell) === "[object Date]" && !isNaN(cell.getTime())) {
+    return Utilities.formatDate(cell, DEFAULT_TZ, "HH:mm");
+  }
   var s = String(cell || "").trim();
   var m = s.match(/^(\d{1,2}):(\d{1,2})/);
-  if (!m) return s;
-  return ("0" + m[1]).slice(-2) + ":" + ("0" + m[2]).slice(-2);
+  if (m) {
+    return ("0" + m[1]).slice(-2) + ":" + ("0" + m[2]).slice(-2);
+  }
+  var parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, DEFAULT_TZ, "HH:mm");
+  }
+  return s;
 }
 
 function buildTodaySummary_(sheet, tz) {
