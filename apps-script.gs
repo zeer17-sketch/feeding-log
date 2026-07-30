@@ -43,17 +43,9 @@ function doPost(e) {
 
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     ensureHeaders_(sheet);
-    var nextRow = Math.max(2, sheet.getLastRow() + 1);
+    var writeResult = appendIfNotDuplicate_(sheet, data);
 
-    sheet.getRange(nextRow, 1, 1, 5).setValues([[
-      data.date || "",
-      data.time || "",
-      eventDisplay_(data.event),
-      data.volume ? String(data.volume) : "",
-      data.notes || ""
-    ]]);
-
-    return output({ success: true, row: nextRow });
+    return output({ success: true, row: writeResult.row, duplicate: writeResult.duplicate });
   } catch (err) {
     return output({ success: false, error: err.toString() });
   }
@@ -88,15 +80,8 @@ function doGet(e) {
       }
       var syncSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
       ensureHeaders_(syncSheet);
-      var syncRow = Math.max(2, syncSheet.getLastRow() + 1);
-      syncSheet.getRange(syncRow, 1, 1, 5).setValues([[
-        syncData.date || "",
-        syncData.time || "",
-        eventDisplay_(syncData.event),
-        syncData.volume ? String(syncData.volume) : "",
-        syncData.notes || ""
-      ]]);
-      return output({ success: true, row: syncRow });
+      var syncResult = appendIfNotDuplicate_(syncSheet, syncData);
+      return output({ success: true, row: syncResult.row, duplicate: syncResult.duplicate });
     } catch (err2) {
       return output({ success: false, error: err2.toString() });
     }
@@ -142,6 +127,48 @@ function ensureHeaders_(sheet) {
     sheet.getRange(1, 1, 1, 5).setValues([HEADERS]);
     sheet.getRange(1, 1, 1, 5).setFontWeight("bold");
   }
+}
+
+function toRowValues_(data) {
+  return [
+    String(data.date || ""),
+    String(data.time || ""),
+    String(eventDisplay_(data.event) || ""),
+    data.volume ? String(data.volume) : "",
+    String(data.notes || "")
+  ];
+}
+
+function normalizeCellText_(value) {
+  return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+}
+
+function rowsEqual_(a, b) {
+  for (var i = 0; i < 5; i++) {
+    if (normalizeCellText_(a[i]) !== normalizeCellText_(b[i])) return false;
+  }
+  return true;
+}
+
+function appendIfNotDuplicate_(sheet, data) {
+  var rowValues = toRowValues_(data);
+  var lastRow = sheet.getLastRow();
+
+  if (lastRow >= 2) {
+    var startRow = Math.max(2, lastRow - 49); // check latest 50 records only
+    var totalRows = lastRow - startRow + 1;
+    var recent = sheet.getRange(startRow, 1, totalRows, 5).getValues();
+
+    for (var i = recent.length - 1; i >= 0; i--) {
+      if (rowsEqual_(recent[i], rowValues)) {
+        return { row: startRow + i, duplicate: true };
+      }
+    }
+  }
+
+  var nextRow = Math.max(2, lastRow + 1);
+  sheet.getRange(nextRow, 1, 1, 5).setValues([rowValues]);
+  return { row: nextRow, duplicate: false };
 }
 
 function eventDisplay_(eventKey) {

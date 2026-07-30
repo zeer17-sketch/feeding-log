@@ -285,6 +285,23 @@ function getSheetLinkHtml(){
   return `<a href="${GOOGLE_SHEET_URL}" target="_blank" rel="noopener">Google Sheet</a>`;
 }
 
+function buildSyncUrl(data){
+  const d=encodeURIComponent(JSON.stringify(data));
+  return SYNC_SERVER+'?sync=1&d='+d+'&t='+Date.now();
+}
+
+function sendCloudSync(data){
+  const url=buildSyncUrl(data);
+  return fetch(url,{method:'GET',mode:'no-cors',cache:'no-store',keepalive:true,credentials:'omit'})
+    .catch(()=>{
+      window.__syncImgs=window.__syncImgs||[];
+      const img=new Image();
+      img.src=url;
+      window.__syncImgs.push(img);
+      setTimeout(()=>{window.__syncImgs.shift()},5000);
+    });
+}
+
 function normalizeInput(raw){
   return(raw||'')
     .replace(/[，、]/g,',')
@@ -302,6 +319,7 @@ function sanitizeNotes(note,event){
   let n=(note||'').trim();
   const common=[
     /\b(just now|just|at|around|about|baby|the baby|today)\b/ig,
+    /\b(a\.?\s*m\.?|p\.?\s*m\.?)\b/ig,
     /刚刚|刚才|宝宝|今天|刚/g,
     /(^|\s)(点喝了|点喝|点喂了|点喂|点吃了|点吃)(?=\s|$)/g
   ];
@@ -483,9 +501,10 @@ function parseMessage(rawText){
     return h;
   }
 
-  const enAmPm=text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i);
+  const enAmPm=text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?|am|pm)\b/i);
   if(enAmPm){
-    const h24=to24h(parseInt(enAmPm[1],10),enAmPm[3]);
+    const ampm=(enAmPm[3]||'').replace(/[\.\s]/g,'').toLowerCase();
+    const h24=to24h(parseInt(enAmPm[1],10),ampm);
     const min=(enAmPm[2]||'00').padStart(2,'0');
     parsedTime=String(h24).padStart(2,'0')+':'+min;
     notes=notes.replace(enAmPm[0],'').trim();
@@ -641,19 +660,14 @@ function confirmRecord(btn){
     addRecord(data);
     card.remove();
     if(isCloudSyncEnabled()){
-      const d=encodeURIComponent(JSON.stringify(data));
-      window.__syncImgs=window.__syncImgs||[];
-      const img=new Image();
-      img.src=SYNC_SERVER+'?sync=1&d='+d+'&t='+Date.now();
-      window.__syncImgs.push(img);
-      setTimeout(()=>{window.__syncImgs.shift()},5000);
+      sendCloudSync(data);
       const link=getSheetLinkHtml();
       if(link)addBotMsg(t('syncSubmittedPrefix')+link,true);
       else addBotMsg(t('syncSubmittedNoLink'));
     }else{
       addBotMsg(t('localSaved'));
     }
-    refreshSummary();
+    refreshSummary(data);
   }catch(e){
     btn.disabled=false;
     btn.textContent=t('btnConfirm');
@@ -683,6 +697,50 @@ function normalizeSummaryData(raw){
       notes:String((r&&r.notes)||'')
     }))
   };
+}
+
+function normalizeRecordKey(rec){
+  return [
+    String(rec&&rec.date||''),
+    String(rec&&rec.time||''),
+    String(rec&&rec.event||''),
+    String(rec&&rec.volume||''),
+    String(rec&&rec.notes||'')
+  ].join('||');
+}
+
+function mergePendingRecord(summary,pendingRecord){
+  if(!pendingRecord||!summary||typeof summary!=='object')return summary;
+  if(String(pendingRecord.date||'')!==String(summary.date||''))return summary;
+
+  const merged={
+    date:String(summary.date||''),
+    feedingCount:parseInt(summary.feedingCount,10)||0,
+    diaperCount:parseInt(summary.diaperCount,10)||0,
+    totalVolume:parseInt(summary.totalVolume,10)||0,
+    records:Array.isArray(summary.records)?summary.records.slice():[]
+  };
+
+  const pending={
+    date:String(pendingRecord.date||merged.date),
+    time:String(pendingRecord.time||''),
+    event:String(pendingRecord.event||'Other'),
+    volume:String(pendingRecord.volume||''),
+    notes:String(pendingRecord.notes||'')
+  };
+
+  const pendingKey=normalizeRecordKey(pending);
+  const exists=merged.records.some(r=>normalizeRecordKey(r)===pendingKey);
+  if(exists)return merged;
+
+  merged.records.push(pending);
+  if(pending.event==='Feeding'){
+    merged.feedingCount+=1;
+    merged.totalVolume+=parseFloat(pending.volume||'0')||0;
+  }else if(pending.event==='Diaper'){
+    merged.diaperCount+=1;
+  }
+  return merged;
 }
 
 function fetchCloudSummary(){
@@ -811,10 +869,10 @@ function renderSummary(s){
   chatArea.scrollTop=chatArea.scrollHeight;
 }
 
-function refreshSummary(){
+function refreshSummary(pendingRecord){
   fetchCloudSummary()
-    .then(summary=>renderSummary(summary))
-    .catch(()=>renderSummary(getLocalSummary()));
+    .then(summary=>renderSummary(mergePendingRecord(summary,pendingRecord)))
+    .catch(()=>renderSummary(mergePendingRecord(getLocalSummary(),pendingRecord)));
 }
 
 function showExport(){
