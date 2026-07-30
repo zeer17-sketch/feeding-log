@@ -12,6 +12,7 @@
  */
 
 var DEFAULT_TZ = "America/Los_Angeles";
+var API_VERSION = "2026-07-29-sync-v3";
 var HEADERS = ["Date 日期", "Time 时间", "Event 事件", "Volume 奶量", "Notes 备注"];
 
 function doPost(e) {
@@ -296,17 +297,25 @@ function buildTodaySummary_(sheet, tz) {
   };
 }
 
+function withVersion_(payload) {
+  var obj = payload || {};
+  if (!Object.prototype.hasOwnProperty.call(obj, "version")) {
+    obj.version = API_VERSION;
+  }
+  return obj;
+}
+
 function outputJsonp_(callbackName, payload) {
   var cb = String(callbackName || "").trim();
   if (!/^[A-Za-z_$][0-9A-Za-z_$\.]{0,120}$/.test(cb)) {
     cb = "feedingLogCallback";
   }
-  var js = cb + "(" + JSON.stringify(payload) + ");";
+  var js = cb + "(" + JSON.stringify(withVersion_(payload)) + ");";
   return ContentService.createTextOutput(js)
     .setMimeType(ContentService.MimeType.JAVASCRIPT);
 }
 
 function output(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
+  return ContentService.createTextOutput(JSON.stringify(withVersion_(obj)))
     .setMimeType(ContentService.MimeType.JSON);
 }
