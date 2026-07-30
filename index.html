@@ -194,8 +194,10 @@ const I18N={
     syncing:'同步中...',
     recordFailed:'❌ 记录失败，请重试',
     canceled:'已取消 👍',
-    syncSubmittedNoLink:'✅ 已提交同步请求，请在 Google Sheet 中确认。',
-    syncSubmittedPrefix:'✅ 已提交同步请求，查看 ',
+    syncSubmittedNoLink:'✅ 已同步到 Google Sheet。',
+    syncSubmittedPrefix:'✅ 已同步到 Google Sheet，查看 ',
+    syncFailedNoLink:'⚠️ 已本地保存，但云端同步失败，请稍后重试。',
+    syncFailedPrefix:'⚠️ 已本地保存，但云端同步失败，请打开并检查 ',
     localSaved:'✅ 已本地记录（未启用 Google 同步）',
     unrecognizedHtml:'🤔 没有识别到喂奶或便便信息。<br><br>你可以这样说：<br>• "刚刚喝了80毫升奶粉"<br>• "上午11点喝了60ml，没打嗝"<br>• "晚上8点半拉了便便"',
     voiceNoSpeech:'没有听到声音，请再试一次 🙉',
@@ -236,8 +238,10 @@ const I18N={
     syncing:'Syncing...',
     recordFailed:'❌ Save failed, please retry',
     canceled:'Canceled 👍',
-    syncSubmittedNoLink:'✅ Sync request submitted. Please check Google Sheet.',
-    syncSubmittedPrefix:'✅ Sync request submitted. Open ',
+    syncSubmittedNoLink:'✅ Synced to Google Sheet.',
+    syncSubmittedPrefix:'✅ Synced to Google Sheet. Open ',
+    syncFailedNoLink:'⚠️ Saved locally, but cloud sync failed. Please retry shortly.',
+    syncFailedPrefix:'⚠️ Saved locally, but cloud sync failed. Please open and check ',
     localSaved:'✅ Saved locally (Google sync disabled)',
     unrecognizedHtml:'🤔 I could not detect feeding or diaper info.<br><br>Try saying:<br>• "Just fed 80 ml formula"<br>• "Fed 60 ml at 11:00, no burp"<br>• "Pooped at 20:30"',
     voiceNoSpeech:'No speech detected, please try again 🙉',
@@ -291,15 +295,48 @@ function buildSyncUrl(data){
 }
 
 function sendCloudSync(data){
-  const url=buildSyncUrl(data);
-  return fetch(url,{method:'GET',mode:'no-cors',cache:'no-store',keepalive:true,credentials:'omit'})
-    .catch(()=>{
-      window.__syncImgs=window.__syncImgs||[];
-      const img=new Image();
-      img.src=url;
-      window.__syncImgs.push(img);
-      setTimeout(()=>{window.__syncImgs.shift()},5000);
-    });
+  if(!isCloudSyncEnabled())return Promise.reject(new Error('cloud-sync-disabled'));
+  return new Promise((resolve,reject)=>{
+    const cbName='__feedingSyncCb_'+Date.now()+'_'+Math.floor(Math.random()*10000);
+    const script=document.createElement('script');
+    let done=false;
+
+    const cleanup=()=>{
+      if(script.parentNode)script.parentNode.removeChild(script);
+      try{delete window[cbName]}catch(e){window[cbName]=undefined}
+    };
+
+    const timer=setTimeout(()=>{
+      if(done)return;
+      done=true;
+      cleanup();
+      reject(new Error('sync-timeout'));
+    },8000);
+
+    window[cbName]=(payload)=>{
+      if(done)return;
+      done=true;
+      clearTimeout(timer);
+      cleanup();
+      if(payload&&payload.success){
+        resolve(payload);
+      }else{
+        reject(new Error((payload&&payload.error)||'sync-invalid-payload'));
+      }
+    };
+
+    script.onerror=()=>{
+      if(done)return;
+      done=true;
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('sync-script-error'));
+    };
+
+    script.async=true;
+    script.src=buildSyncUrl(data)+'&callback='+encodeURIComponent(cbName);
+    document.body.appendChild(script);
+  });
 }
 
 function normalizeInput(raw){
@@ -660,14 +697,23 @@ function confirmRecord(btn){
     addRecord(data);
     card.remove();
     if(isCloudSyncEnabled()){
-      sendCloudSync(data);
-      const link=getSheetLinkHtml();
-      if(link)addBotMsg(t('syncSubmittedPrefix')+link,true);
-      else addBotMsg(t('syncSubmittedNoLink'));
+      sendCloudSync(data)
+        .then(()=>{
+          const link=getSheetLinkHtml();
+          if(link)addBotMsg(t('syncSubmittedPrefix')+link,true);
+          else addBotMsg(t('syncSubmittedNoLink'));
+          refreshSummary(data,{cloudOnly:true});
+        })
+        .catch(()=>{
+          const link=getSheetLinkHtml();
+          if(link)addBotMsg(t('syncFailedPrefix')+link,true);
+          else addBotMsg(t('syncFailedNoLink'));
+          refreshSummary(undefined,{cloudOnly:true});
+        });
     }else{
       addBotMsg(t('localSaved'));
+      refreshSummary(data);
     }
-    refreshSummary(data);
   }catch(e){
     btn.disabled=false;
     btn.textContent=t('btnConfirm');
@@ -869,10 +915,27 @@ function renderSummary(s){
   chatArea.scrollTop=chatArea.scrollHeight;
 }
 
-function refreshSummary(pendingRecord){
+let lastCloudSummary=null;
+
+function refreshSummary(pendingRecord,options){
+  const opts=options||{};
+  if(!isCloudSyncEnabled()){
+    renderSummary(mergePendingRecord(getLocalSummary(),pendingRecord));
+    return;
+  }
+
   fetchCloudSummary()
-    .then(summary=>renderSummary(mergePendingRecord(summary,pendingRecord)))
-    .catch(()=>renderSummary(mergePendingRecord(getLocalSummary(),pendingRecord)));
+    .then(summary=>{
+      lastCloudSummary=summary;
+      renderSummary(mergePendingRecord(summary,pendingRecord));
+    })
+    .catch(()=>{
+      if(opts.cloudOnly){
+        if(lastCloudSummary)renderSummary(mergePendingRecord(lastCloudSummary,pendingRecord));
+        return;
+      }
+      renderSummary(mergePendingRecord(getLocalSummary(),pendingRecord));
+    });
 }
 
 function showExport(){

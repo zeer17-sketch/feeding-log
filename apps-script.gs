@@ -76,14 +76,20 @@ function doGet(e) {
     try {
       var syncData = JSON.parse(e.parameter.d);
       if (!syncData || !syncData.event) {
-        return output({ success: false, error: "Missing event" });
+        var missingPayload = { success: false, error: "Missing event" };
+        if (e.parameter.callback) return outputJsonp_(e.parameter.callback, missingPayload);
+        return output(missingPayload);
       }
       var syncSheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
       ensureHeaders_(syncSheet);
       var syncResult = appendIfNotDuplicate_(syncSheet, syncData);
-      return output({ success: true, row: syncResult.row, duplicate: syncResult.duplicate });
+      var syncPayload = { success: true, row: syncResult.row, duplicate: syncResult.duplicate };
+      if (e.parameter.callback) return outputJsonp_(e.parameter.callback, syncPayload);
+      return output(syncPayload);
     } catch (err2) {
-      return output({ success: false, error: err2.toString() });
+      var syncErrPayload = { success: false, error: err2.toString() };
+      if (e.parameter.callback) return outputJsonp_(e.parameter.callback, syncErrPayload);
+      return output(syncErrPayload);
     }
   }
 
