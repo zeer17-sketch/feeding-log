@@ -280,6 +280,10 @@ let isListening=false;
 let currentLang=localStorage.getItem(UI_LANG_KEY)||((navigator.language||'').toLowerCase().startsWith('zh')?'zh':'en');
 let currentFont=localStorage.getItem(UI_FONT_KEY)||'md';
 
+const SYNC_TIMEOUT_MS=20000;
+const SYNC_RETRY_DELAY_MS=1200;
+const SUMMARY_VERIFY_DELAY_MS=1500;
+
 function t(key){return(I18N[currentLang]&&I18N[currentLang][key])||(I18N.zh&&I18N.zh[key])||key}
 function eventLabel(event){return t('eventLabels')[event]||event}
 function eventPlain(event){return t('eventPlain')[event]||event}
@@ -294,8 +298,13 @@ function buildSyncUrl(data){
   return SYNC_SERVER+'?sync=1&d='+d+'&t='+Date.now();
 }
 
-function sendCloudSync(data){
+function waitMs(ms){
+  return new Promise(resolve=>setTimeout(resolve,ms));
+}
+
+function sendCloudSyncOnce(data,timeoutMs){
   if(!isCloudSyncEnabled())return Promise.reject(new Error('cloud-sync-disabled'));
+  const tm=Math.max(1000,parseInt(timeoutMs,10)||SYNC_TIMEOUT_MS);
   return new Promise((resolve,reject)=>{
     const cbName='__feedingSyncCb_'+Date.now()+'_'+Math.floor(Math.random()*10000);
     const script=document.createElement('script');
@@ -311,7 +320,7 @@ function sendCloudSync(data){
       done=true;
       cleanup();
       reject(new Error('sync-timeout'));
-    },8000);
+    },tm);
 
     window[cbName]=(payload)=>{
       if(done)return;
@@ -337,6 +346,34 @@ function sendCloudSync(data){
     script.src=buildSyncUrl(data)+'&callback='+encodeURIComponent(cbName);
     document.body.appendChild(script);
   });
+}
+
+function recordKeyForSummaryCheck(rec){
+  return normalizeRecordKey({
+    date:String(rec&&rec.date||''),
+    time:String(rec&&rec.time||''),
+    event:String(rec&&rec.event||'Other'),
+    volume:String(rec&&rec.volume||''),
+    notes:String(rec&&rec.notes||'')
+  });
+}
+
+function verifyRecordInCloudSummary(data){
+  return waitMs(SUMMARY_VERIFY_DELAY_MS)
+    .then(()=>fetchCloudSummary())
+    .then(summary=>{
+      lastCloudSummary=summary;
+      const targetKey=recordKeyForSummaryCheck(data);
+      const exists=(summary.records||[]).some(r=>recordKeyForSummaryCheck(r)===targetKey);
+      if(exists)return {success:true,verifiedBySummary:true};
+      throw new Error('sync-not-found-in-summary');
+    });
+}
+
+function sendCloudSync(data){
+  return sendCloudSyncOnce(data,SYNC_TIMEOUT_MS)
+    .catch(()=>waitMs(SYNC_RETRY_DELAY_MS).then(()=>sendCloudSyncOnce(data,SYNC_TIMEOUT_MS)))
+    .catch(()=>verifyRecordInCloudSummary(data));
 }
 
 function normalizeInput(raw){
@@ -806,7 +843,7 @@ function fetchCloudSummary(){
       done=true;
       cleanup();
       reject(new Error('summary-timeout'));
-    },8000);
+    },12000);
 
     window[cbName]=(payload)=>{
       if(done)return;
